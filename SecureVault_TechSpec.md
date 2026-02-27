@@ -129,7 +129,7 @@ This Technical Specification translates the SecureVault PRD into implementable e
 
 ## 3. Technology Stack
 
-### 3.1 Selected Stack (Recommended)
+### 3.1 Selected Stack *(Finalized — February 2026)*
 
 | Layer | Technology | Version | Rationale |
 |---|---|---|---|
@@ -370,9 +370,11 @@ Secret Value
 | Key rotation (manual) | Re-encrypt all DEKs with new MEK; atomic swap of key file |
 | Key file missing at startup | Application refuses to start; returns HTTP 503 to reverse proxy |
 
+**Selected strategy: Local key file** (see PRD §13, Decision #3). The key file is stored on a volume separate from the database, with permissions `chmod 400`. HashiCorp Vault support is planned for v2.0.
+
 Key file location options (in priority order):
-1. Path specified in `SECUREVAULT_KEY_FILE` environment variable
-2. OS-level secrets manager (Windows DPAPI / Linux kernel keyring) via optional plugin
+1. **Path specified in `SECUREVAULT_KEY_FILE` environment variable** *(recommended — selected for v1.0)*
+2. OS-level secrets manager (Windows DPAPI / Linux kernel keyring) via optional plugin *(v2.0)*
 3. `appsettings.json` → `Encryption:KeyFilePath` (not recommended for production)
 
 ### 5.3 Encryption Implementation
@@ -442,6 +444,8 @@ var config = new Argon2Config
 8. Reset failed_attempts = 0; update last_login
 ```
 
+**MFA Policy (v1.0):** MFA is **optional** and configurable by Super Admins (see PRD §13, Decision #4). It can be enforced globally or per-user via the Admin Module. The default configuration ships with MFA disabled; Super Admins are prompted to review this setting during first-run setup.
+
 ### 6.2 Token Design
 
 | Token | Type | Lifetime | Storage |
@@ -464,7 +468,7 @@ var config = new Argon2Config
 }
 ```
 
-### 6.3 LDAP / AD Integration
+### 6.3 LDAP / AD Integration *(Included in v1.0 — see PRD §13, Decision #2)*
 
 When `Auth:Mode = "LDAP"` in configuration:
 - Bind to LDAP server using service account credentials over LDAPS (port 636).
@@ -1107,7 +1111,7 @@ Use this checklist during pre-production review and quarterly security audits.
 - [ ] Syslog forwarding configured and tested (if SIEM in use)
 - [ ] Alert configured on repeated `AUTH_LOGIN_FAILURE` events (e.g., > 20/hour)
 - [ ] Audit log export tested for correct date-range filtering
-- [ ] Log retention policy confirmed (90-day app logs; 1-year audit logs)
+- [ ] Log retention policy confirmed (90-day app logs; **1-year audit logs** — see PRD §13, Decision #5; configurable via `Logging:AuditRetentionDays` for sites with stricter requirements)
 
 ### 14.6 Dependencies & Build
 
@@ -1242,3 +1246,4 @@ A story or task is complete when:
 | Version | Date | Author | Summary |
 |---|---|---|---|
 | 1.0 | February 2026 | IT Team | Initial draft derived from SecureVault PRD v1.0 |
+| 1.1 | February 2026 | IT Team | Applied architecture decisions: ASP.NET Core 8 stack finalized; LDAP included in v1.0; local key file (MEK) confirmed; MFA policy set to optional/configurable; audit log retention confirmed at 1 year. Updated §3.1, §5.2, §6, §6.3, §14.5. |

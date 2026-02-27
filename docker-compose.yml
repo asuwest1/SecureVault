@@ -1,0 +1,116 @@
+version: "3.9"
+
+# IMPORTANT: All image digests should be pinned to specific SHA256 hashes in production.
+# Use `docker pull <image>` and `docker inspect --format='{{index .RepoDigests 0}}' <image>`
+# to obtain the digest, then replace the tag with @sha256:<hash>.
+
+services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Database migration — runs once before app starts
+  # ─────────────────────────────────────────────────────────────────────────
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dotnet-build
+    command: dotnet ef database update --project src/SecureVault.Infrastructure --startup-project src/SecureVault.Api
+    environment:
+      ConnectionStrings__Default: "Host=db;Database=securevault;Username=securevault_app;Password=${DB_PASSWORD}"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Application
+  # ─────────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ConnectionStrings__Default: "Host=db;Database=securevault;Username=securevault_app;Password=${DB_PASSWORD}"
+      SECUREVAULT_KEY_FILE: /run/secrets/securevault-mek
+      Auth__JwtSigningKeyPath: /run/secrets/jwt-signing.pem
+      Auth__Mode: "${AUTH_MODE:-local}"
+      Syslog__Host: "${SYSLOG_HOST:-}"
+      ASPNETCORE_ENVIRONMENT: Production
+    secrets:
+      - securevault-mek
+      - jwt-signing.pem
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '1.0'
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Database — PostgreSQL 16
+  # ─────────────────────────────────────────────────────────────────────────
+  db:
+    # postgres:16-alpine — pin to digest in production
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: securevault
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${DB_SUPERUSER_PASSWORD}"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./scripts/db-setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d securevault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Nginx — TLS termination and reverse proxy
+  # ─────────────────────────────────────────────────────────────────────────
+  nginx:
+    # nginx:1.26-alpine — pin to digest in production
+    image: nginx:1.26-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${TLS_CERT_PATH:-./nginx/certs}:/etc/nginx/certs:ro
+    depends_on:
+      - app
+    networks:
+      - internal
+      - external
+    restart: unless-stopped
+
+volumes:
+  db_data:
+    driver: local
+
+networks:
+  # App and DB can only communicate internally
+  internal:
+    internal: true
+  # Only Nginx is on the external network
+  external:
+
+secrets:
+  securevault-mek:
+    file: ${MEK_FILE_PATH:-./secrets/securevault-mek}
+  jwt-signing.pem:
+    file: ${JWT_KEY_PATH:-./secrets/jwt-signing.pem}
