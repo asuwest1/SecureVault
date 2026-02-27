@@ -48,6 +48,32 @@ public class PermissionService : IPermissionService
         }
 
         // 3. Walk folder hierarchy via recursive CTE
+        if (!db.Database.IsRelational())
+        {
+            var folderId = await db.Secrets
+                .AsNoTracking()
+                .Where(s => s.Id == secretId)
+                .Select(s => s.FolderId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (folderId == Guid.Empty)
+                return null;
+
+            var folderPermissions = await GetFolderPermissionsNonRelationalAsync(
+                db,
+                folderId,
+                roleIdList,
+                cancellationToken);
+
+            if (folderPermissions.Count > 0)
+            {
+                var combined = folderPermissions.Aggregate(SecretPermission.None, (acc, p) => acc | p);
+                return combined == SecretPermission.None ? null : combined;
+            }
+
+            return null;
+        }
+
         var sql = @"
             WITH RECURSIVE folder_path AS (
                 SELECT f.id, f.parent_folder_id
@@ -95,6 +121,20 @@ public class PermissionService : IPermissionService
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
 
+        if (!db.Database.IsRelational())
+        {
+            var permissions = await GetFolderPermissionsNonRelationalAsync(
+                db,
+                folderId,
+                roleIdList,
+                cancellationToken);
+
+            if (permissions.Count == 0) return null;
+
+            var combined = permissions.Aggregate(SecretPermission.None, (acc, p) => acc | p);
+            return combined == SecretPermission.None ? null : combined;
+        }
+
         var sql = @"
             WITH RECURSIVE folder_path AS (
                 SELECT id, parent_folder_id FROM folders WHERE id = {0}
@@ -117,6 +157,39 @@ public class PermissionService : IPermissionService
 
         var combined = (SecretPermission)permissions.Aggregate(0, (acc, p) => acc | p);
         return combined == SecretPermission.None ? null : combined;
+    }
+
+    private static async Task<List<SecretPermission>> GetFolderPermissionsNonRelationalAsync(
+        AppDbContext db,
+        Guid startFolderId,
+        IReadOnlyCollection<Guid> roleIds,
+        CancellationToken cancellationToken)
+    {
+        var folderPermissions = new List<SecretPermission>();
+        var currentFolderId = startFolderId;
+
+        while (true)
+        {
+            var currentAcls = await db.FolderAcls
+                .AsNoTracking()
+                .Where(a => a.FolderId == currentFolderId && roleIds.Contains(a.RoleId))
+                .Select(a => a.Permissions)
+                .ToListAsync(cancellationToken);
+
+            folderPermissions.AddRange(currentAcls);
+
+            var parentFolderId = await db.Folders
+                .AsNoTracking()
+                .Where(f => f.Id == currentFolderId)
+                .Select(f => f.ParentFolderId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (parentFolderId is null) break;
+
+            currentFolderId = parentFolderId.Value;
+        }
+
+        return folderPermissions;
     }
 
     public async Task<IReadOnlyList<Guid>> GetAccessibleSecretIdsAsync(

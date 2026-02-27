@@ -16,6 +16,8 @@ namespace SecureVault.Tests.Integration;
 /// </summary>
 public class AuthFlowTests : IAsyncLifetime
 {
+    private const string JwtKeyPath = "/tmp/jwt-dev.pem";
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("securevault_test")
@@ -31,6 +33,8 @@ public class AuthFlowTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
+        WriteJwtKey(JwtKeyPath);
+        Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", JwtKeyPath);
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -52,7 +56,7 @@ public class AuthFlowTests : IAsyncLifetime
                     File.WriteAllBytes(mekFile, mek);
 
                     Environment.SetEnvironmentVariable("SECUREVAULT_KEY_FILE", mekFile);
-                    Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", CreateTestJwtKey());
+                    Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", JwtKeyPath);
                 });
             });
 
@@ -169,12 +173,10 @@ public class AuthFlowTests : IAsyncLifetime
         });
     }
 
-    private static string CreateTestJwtKey()
+    private static void WriteJwtKey(string path)
     {
-        var keyFile = Path.GetTempFileName();
         using var rsa = System.Security.Cryptography.RSA.Create(2048);
-        File.WriteAllText(keyFile, rsa.ExportRSAPrivateKeyPem());
-        return keyFile;
+        File.WriteAllText(path, rsa.ExportRSAPrivateKeyPem());
     }
 
     public async Task DisposeAsync()
@@ -182,6 +184,9 @@ public class AuthFlowTests : IAsyncLifetime
         _client?.Dispose();
         if (_factory != null) await _factory.DisposeAsync();
         await _postgres.DisposeAsync();
+
+        if (File.Exists(JwtKeyPath))
+            File.Delete(JwtKeyPath);
     }
 
     private record LoginResult(string AccessToken, string ExpiresAt, bool MfaRequired, string? MfaToken);

@@ -20,6 +20,8 @@ namespace SecureVault.Tests.Security;
 /// </summary>
 public class SecurityTests : IAsyncLifetime
 {
+    private const string JwtKeyPath = "/tmp/jwt-dev.pem";
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
         .WithDatabase("securevault_sec_test")
@@ -35,6 +37,8 @@ public class SecurityTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
+        WriteJwtKey(JwtKeyPath);
+        Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", JwtKeyPath);
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -54,10 +58,7 @@ public class SecurityTests : IAsyncLifetime
                     File.WriteAllBytes(mekFile, mek);
                     Environment.SetEnvironmentVariable("SECUREVAULT_KEY_FILE", mekFile);
 
-                    var jwtKeyFile = Path.GetTempFileName();
-                    using var rsa = System.Security.Cryptography.RSA.Create(2048);
-                    File.WriteAllText(jwtKeyFile, rsa.ExportRSAPrivateKeyPem());
-                    Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", jwtKeyFile);
+                    Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", JwtKeyPath);
                 });
             });
 
@@ -239,6 +240,15 @@ public class SecurityTests : IAsyncLifetime
         _client?.Dispose();
         if (_factory != null) await _factory.DisposeAsync();
         await _postgres.DisposeAsync();
+
+        if (File.Exists(JwtKeyPath))
+            File.Delete(JwtKeyPath);
+    }
+
+    private static void WriteJwtKey(string path)
+    {
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        File.WriteAllText(path, rsa.ExportRSAPrivateKeyPem());
     }
 
     private record LoginResult(string AccessToken, string ExpiresAt, bool MfaRequired);
