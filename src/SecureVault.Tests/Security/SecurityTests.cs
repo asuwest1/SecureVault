@@ -4,7 +4,6 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
@@ -49,7 +48,6 @@ public class SecurityTests : IAsyncLifetime
                 {
                     services.RemoveAll<DbContextOptions<AppDbContext>>();
                     services.RemoveAll<DbContextOptions>();
-                    services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
                     services.RemoveAll<AppDbContext>();
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 

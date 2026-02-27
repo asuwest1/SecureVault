@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
@@ -48,7 +47,6 @@ public class AuthFlowTests : IAsyncLifetime
                     // so clear both to avoid lifetime mismatches in tests.
                     services.RemoveAll<DbContextOptions<AppDbContext>>();
                     services.RemoveAll<DbContextOptions>();
-                    services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
                     services.RemoveAll<AppDbContext>();
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
