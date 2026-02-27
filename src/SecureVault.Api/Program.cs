@@ -150,11 +150,6 @@ builder.Services.AddSwaggerGen(c =>
 builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Static files — serve React SPA from wwwroot
-// ─────────────────────────────────────────────────────────────────────────────
-builder.Services.AddSpaStaticFiles(config => config.RootPath = "wwwroot");
-
 var app = builder.Build();
 
 // ─────────────────────────────────────────────────────────────────────────────
