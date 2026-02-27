@@ -59,16 +59,16 @@ public class PermissionService : IPermissionService
             if (folderId == Guid.Empty)
                 return null;
 
-            var folderPermissions = await GetFolderPermissionsNonRelationalAsync(
+            var nonRelationalFolderPermissions = await GetFolderPermissionsNonRelationalAsync(
                 db,
                 folderId,
                 roleIdList,
                 cancellationToken);
 
-            if (folderPermissions.Count > 0)
+            if (nonRelationalFolderPermissions.Count > 0)
             {
-                var combined = folderPermissions.Aggregate(SecretPermission.None, (acc, p) => acc | p);
-                return combined == SecretPermission.None ? null : combined;
+                var nonRelationalCombined = nonRelationalFolderPermissions.Aggregate(SecretPermission.None, (acc, p) => acc | p);
+                return nonRelationalCombined == SecretPermission.None ? null : nonRelationalCombined;
             }
 
             return null;
@@ -123,16 +123,16 @@ public class PermissionService : IPermissionService
 
         if (!db.Database.IsRelational())
         {
-            var permissions = await GetFolderPermissionsNonRelationalAsync(
+            var nonRelationalPermissions = await GetFolderPermissionsNonRelationalAsync(
                 db,
                 folderId,
                 roleIdList,
                 cancellationToken);
 
-            if (permissions.Count == 0) return null;
+            if (nonRelationalPermissions.Count == 0) return null;
 
-            var combined = permissions.Aggregate(SecretPermission.None, (acc, p) => acc | p);
-            return combined == SecretPermission.None ? null : combined;
+            var nonRelationalCombined = nonRelationalPermissions.Aggregate(SecretPermission.None, (acc, p) => acc | p);
+            return nonRelationalCombined == SecretPermission.None ? null : nonRelationalCombined;
         }
 
         var sql = @"
