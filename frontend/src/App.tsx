@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useIdleTimeout } from '@/hooks/useIdleTimeout'
 import { LoginPage } from '@/pages/LoginPage'
@@ -24,7 +24,6 @@ function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { isAuthenticated, silentRefresh, logout } = useAuth()
-  const navigate = useNavigate()
 
   // Attempt silent refresh on mount (restore session after page refresh)
   useEffect(() => {
