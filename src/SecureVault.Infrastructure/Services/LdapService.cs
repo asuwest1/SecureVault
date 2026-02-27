@@ -35,7 +35,7 @@ public class LdapService : ILdapService
         try
         {
             using var conn = new LdapConnection { SecureSocketLayer = (_port == 636) };
-            await Task.Run(() =>
+            var found = await Task.Run<LdapUserInfo?>(() =>
             {
                 conn.Connect(_host, _port);
 
@@ -55,10 +55,12 @@ public class LdapService : ILdapService
                     var displayName = entry.GetAttributeSet().GetAttribute(_displayNameAttribute)?.StringValue ?? username;
                     return new LdapUserInfo(username, email, displayName);
                 }
+
+                return null;
             }, cancellationToken);
 
-            // If bind succeeded but search found nothing, still return basic info
-            return new LdapUserInfo(username, $"{username}@ldap", username);
+            // If bind succeeded but search found nothing, return basic info
+            return found ?? new LdapUserInfo(username, $"{username}@ldap", username);
         }
         catch (LdapException ex) when (ex.ResultCode == LdapException.InvalidCredentials)
         {

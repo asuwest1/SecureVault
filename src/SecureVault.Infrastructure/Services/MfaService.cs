@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using OtpNet;
 using SecureVault.Core.Interfaces;
 
