@@ -26,6 +26,8 @@ public class AuthFlowTests : IAsyncLifetime
     private WebApplicationFactory<Program>? _factory;
     private HttpClient? _client;
 
+    private HttpClient Client => _client ?? throw new InvalidOperationException("Test client not initialized.");
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
@@ -66,7 +68,7 @@ public class AuthFlowTests : IAsyncLifetime
     public async Task Login_ValidCredentials_ReturnsAccessToken()
     {
         // First run: initialize the system
-        var initResponse = await _client!.PostAsJsonAsync("/api/v1/setup/initialize", new
+        var initResponse = await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "admin",
             AdminEmail = "admin@test.com",
@@ -76,7 +78,7 @@ public class AuthFlowTests : IAsyncLifetime
         initResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Login
-        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "admin",
             Password = "TestAdmin123!"
@@ -91,7 +93,7 @@ public class AuthFlowTests : IAsyncLifetime
     [Fact]
     public async Task Login_WrongPassword_Returns401()
     {
-        var response = await _client!.PostAsJsonAsync("/api/v1/auth/login", new
+        var response = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "admin",
             Password = "WrongPassword!"
@@ -104,7 +106,7 @@ public class AuthFlowTests : IAsyncLifetime
     public async Task Login_FiveFailedAttempts_LocksAccount()
     {
         // Initialize first
-        await _client!.PostAsJsonAsync("/api/v1/setup/initialize", new
+        await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "locktest",
             AdminEmail = "lock@test.com",
@@ -115,7 +117,7 @@ public class AuthFlowTests : IAsyncLifetime
         // 5 failed login attempts
         for (int i = 0; i < 5; i++)
         {
-            await _client.PostAsJsonAsync("/api/v1/auth/login", new
+            await Client.PostAsJsonAsync("/api/v1/auth/login", new
             {
                 Username = "locktest",
                 Password = "WrongPassword!"
@@ -123,7 +125,7 @@ public class AuthFlowTests : IAsyncLifetime
         }
 
         // 6th attempt — should still return 401 (account locked, but message is same)
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        var response = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "locktest",
             Password = "TestLock123!"  // Even correct password fails when locked
@@ -138,27 +140,27 @@ public class AuthFlowTests : IAsyncLifetime
     {
         // Setup + login
         await InitializeTestUserAsync();
-        var loginResponse = await _client!.PostAsJsonAsync("/api/v1/auth/login", new
+        var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "logouttest",
             Password = "Logout123!"
         });
         var login = await loginResponse.Content.ReadFromJsonAsync<LoginResult>();
 
-        _client.DefaultRequestHeaders.Authorization =
+        Client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login!.AccessToken);
 
-        var logoutResponse = await _client.PostAsync("/api/v1/auth/logout", null);
+        var logoutResponse = await Client.PostAsync("/api/v1/auth/logout", null);
         logoutResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Refresh should fail after logout
-        var refreshResponse = await _client.PostAsync("/api/v1/auth/refresh", null);
+        var refreshResponse = await Client.PostAsync("/api/v1/auth/refresh", null);
         refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     private async Task InitializeTestUserAsync()
     {
-        await _client!.PostAsJsonAsync("/api/v1/setup/initialize", new
+        await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "logouttest",
             AdminEmail = "logout@test.com",

@@ -30,6 +30,8 @@ public class SecurityTests : IAsyncLifetime
     private WebApplicationFactory<Program>? _factory;
     private HttpClient? _client;
 
+    private HttpClient Client => _client ?? throw new InvalidOperationException("Test client not initialized.");
+
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
@@ -77,17 +79,17 @@ public class SecurityTests : IAsyncLifetime
 
         // Initialize and login
         var token = await SetupAndLoginAsync();
-        _client!.DefaultRequestHeaders.Authorization =
+        Client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         // Create a folder first, then a secret
-        var folderResponse = await _client.PostAsJsonAsync("/api/v1/folders", new
+        var folderResponse = await Client.PostAsJsonAsync("/api/v1/folders", new
         {
             Name = "Test Folder"
         });
         var folder = await folderResponse.Content.ReadFromJsonAsync<FolderResult>();
 
-        await _client.PostAsJsonAsync("/api/v1/secrets", new
+        await Client.PostAsJsonAsync("/api/v1/secrets", new
         {
             Name = "Test Secret",
             Value = plaintextSecret,
@@ -126,10 +128,10 @@ public class SecurityTests : IAsyncLifetime
         // Craft a token claiming RS256 but signed with HMAC using public key bytes
         var tamperedToken = CreateHS256TokenWithRS256PublicKey();
 
-        _client!.DefaultRequestHeaders.Authorization =
+        Client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tamperedToken);
 
-        var response = await _client.GetAsync("/api/v1/secrets");
+        var response = await Client.GetAsync("/api/v1/secrets");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             because: "algorithm confusion attacks must be rejected");
     }
@@ -141,15 +143,15 @@ public class SecurityTests : IAsyncLifetime
     public async Task RegularUser_CannotAccess_AdminEndpoints()
     {
         var adminToken = await SetupAndLoginAsync();
-        _client!.DefaultRequestHeaders.Authorization =
+        Client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
 
         // Super admin endpoint should be accessible with super admin token
-        var auditResponse = await _client.GetAsync("/api/v1/audit");
+        var auditResponse = await Client.GetAsync("/api/v1/audit");
         auditResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Create a regular (non-admin) user via admin token
-        var createUserResponse = await _client.PostAsJsonAsync("/api/v1/users", new
+        var createUserResponse = await Client.PostAsJsonAsync("/api/v1/users", new
         {
             Username = "regularuser",
             Email = "regular@test.com",
@@ -159,7 +161,7 @@ public class SecurityTests : IAsyncLifetime
         createUserResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Login as the regular user
-        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "regularuser",
             Password = "RegularUser123!"
@@ -168,7 +170,7 @@ public class SecurityTests : IAsyncLifetime
         login.Should().NotBeNull();
 
         // Switch to regular user token
-        _client.DefaultRequestHeaders.Authorization =
+        Client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login!.AccessToken);
 
         // Verify regular user is denied access to admin-only endpoints
@@ -176,7 +178,7 @@ public class SecurityTests : IAsyncLifetime
 
         foreach (var endpoint in adminEndpoints)
         {
-            var response = await _client.GetAsync(endpoint);
+            var response = await Client.GetAsync(endpoint);
             response.StatusCode.Should().NotBe(HttpStatusCode.OK,
                 because: $"regular user must be denied access to admin endpoint {endpoint}");
         }
@@ -190,7 +192,7 @@ public class SecurityTests : IAsyncLifetime
     {
         await SetupAndLoginAsync();
 
-        var response = await _client!.PostAsJsonAsync("/api/v1/setup/initialize", new
+        var response = await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "attacker",
             AdminEmail = "attacker@evil.com",
@@ -203,14 +205,14 @@ public class SecurityTests : IAsyncLifetime
 
     private async Task<string> SetupAndLoginAsync()
     {
-        await _client!.PostAsJsonAsync("/api/v1/setup/initialize", new
+        await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "secadmin",
             AdminEmail = "secadmin@test.com",
             AdminPassword = "SecAdmin123!"
         });
 
-        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "secadmin",
             Password = "SecAdmin123!"
