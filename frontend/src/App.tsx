@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useIdleTimeout } from '@/hooks/useIdleTimeout'
@@ -10,13 +10,13 @@ import { AdminUsersPage } from '@/pages/AdminUsersPage'
 import { FirstRunPage } from '@/pages/FirstRunPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
+function RequireSuperAdmin({ children }: { children: ReactNode }) {
   const { isSuperAdmin } = useAuth()
   if (!isSuperAdmin) return <Navigate to="/" replace />
   return <>{children}</>
@@ -30,7 +30,7 @@ export default function App() {
     if (!isAuthenticated) {
       silentRefresh()
     }
-  }, [])  // Only on mount
+  }, [isAuthenticated, silentRefresh])
 
   // Idle timeout: 15 minutes → auto logout
   useIdleTimeout(
