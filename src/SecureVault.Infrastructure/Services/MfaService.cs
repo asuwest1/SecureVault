@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using OtpNet;
 using SecureVault.Core.Interfaces;
 
@@ -24,7 +25,7 @@ public class MfaService
                   $"?secret={base32Secret}&issuer={Uri.EscapeDataString(Issuer)}&algorithm=SHA1&digits=6&period=30";
 
         // Zero the plaintext secret
-        CryptographicOperations.ZeroMemory(secret);
+        ClearSensitiveBuffer(secret);
 
         return (encryptedSecret, uri);
     }
@@ -46,7 +47,16 @@ public class MfaService
         finally
         {
             if (secret != null)
-                CryptographicOperations.ZeroMemory(secret);
+                ClearSensitiveBuffer(secret);
         }
+    }
+
+    private static void ClearSensitiveBuffer(byte[] buffer)
+    {
+#if NET8_0_OR_GREATER
+        CryptographicOperations.ZeroMemory(buffer);
+#else
+        Array.Clear(buffer, 0, buffer.Length);
+#endif
     }
 }

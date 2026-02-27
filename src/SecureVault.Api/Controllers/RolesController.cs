@@ -123,10 +123,11 @@ public class RolesController : ControllerBase
         RequireSuperAdmin();
 
         // Verify the secret exists
-        var secretExists = await _db.Secrets.AnyAsync(s => s.Id == request.RoleId, ct);
+        if (!await _db.Secrets.AnyAsync(s => s.Id == request.SecretId, ct))
+            return NotFound();
 
         var existing = await _db.SecretAcls
-            .FirstOrDefaultAsync(sa => sa.SecretId == request.RoleId && sa.RoleId == id, ct);
+            .FirstOrDefaultAsync(sa => sa.SecretId == request.SecretId && sa.RoleId == id, ct);
 
         if (existing != null)
         {
@@ -137,7 +138,7 @@ public class RolesController : ControllerBase
         {
             _db.SecretAcls.Add(new SecretAcl
             {
-                SecretId = request.RoleId,
+                SecretId = request.SecretId,
                 RoleId = id,
                 Permissions = request.Permissions,
                 UpdatedAt = DateTimeOffset.UtcNow

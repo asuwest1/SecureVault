@@ -26,44 +26,43 @@ public class LdapService : ILdapService
         _logger = logger;
     }
 
-    public async Task<LdapUserInfo?> AuthenticateAsync(
+    public Task<LdapUserInfo?> AuthenticateAsync(
         string username, string password, CancellationToken cancellationToken = default)
     {
         // Sanitize username per RFC 4515 to prevent LDAP injection
         var safeUsername = SanitizeLdapInput(username);
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             using var conn = new LdapConnection { SecureSocketLayer = (_port == 636) };
-            await Task.Run(() =>
+            conn.Connect(_host, _port);
+
+            var userDn = string.Format(_userDnTemplate, safeUsername);
+            conn.Bind(userDn, password);
+
+            // Search for user attributes after successful bind
+            var constraints = new LdapSearchConstraints { MaxResults = 1 };
+            var filter = $"(uid={safeUsername})";
+            var attributes = new[] { _emailAttribute, _displayNameAttribute };
+            var results = conn.Search(_baseDn, LdapConnection.ScopeSub, filter, attributes, false, constraints);
+
+            if (results.HasMore())
             {
-                conn.Connect(_host, _port);
+                var entry = results.Next();
+                var email = entry.GetAttributeSet().GetAttribute(_emailAttribute)?.StringValue ?? $"{username}@ldap";
+                var displayName = entry.GetAttributeSet().GetAttribute(_displayNameAttribute)?.StringValue ?? username;
+                return Task.FromResult<LdapUserInfo?>(new LdapUserInfo(username, email, displayName));
+            }
 
-                var userDn = string.Format(_userDnTemplate, safeUsername);
-                conn.Bind(userDn, password);
-
-                // Search for user attributes after successful bind
-                var constraints = new LdapSearchConstraints { MaxResults = 1 };
-                var filter = $"(uid={safeUsername})";
-                var results = conn.Search(_baseDn, LdapConnection.ScopeSub, filter,
-                    [_emailAttribute, _displayNameAttribute], false, constraints);
-
-                if (results.HasMore())
-                {
-                    var entry = results.Next();
-                    var email = entry.GetAttributeSet().GetAttribute(_emailAttribute)?.StringValue ?? $"{username}@ldap";
-                    var displayName = entry.GetAttributeSet().GetAttribute(_displayNameAttribute)?.StringValue ?? username;
-                    return new LdapUserInfo(username, email, displayName);
-                }
-            }, cancellationToken);
-
-            // If bind succeeded but search found nothing, still return basic info
-            return new LdapUserInfo(username, $"{username}@ldap", username);
+            // If bind succeeded but search found nothing, return basic info
+            return Task.FromResult<LdapUserInfo?>(new LdapUserInfo(username, $"{username}@ldap", username));
         }
         catch (LdapException ex) when (ex.ResultCode == LdapException.InvalidCredentials)
         {
             _logger.LogDebug("LDAP authentication failed for user '{Username}': invalid credentials", safeUsername);
-            return null;
+            return Task.FromResult<LdapUserInfo?>(null);
         }
         catch (Exception ex)
         {

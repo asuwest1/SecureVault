@@ -14,6 +14,6 @@ public record UpdateRoleRequest(
 );
 
 public record SetSecretAclRequest(
-    [Required] Guid RoleId,
+    [Required] Guid SecretId,
     SecretPermission Permissions
 );

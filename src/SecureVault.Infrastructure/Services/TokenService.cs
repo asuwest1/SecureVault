@@ -64,8 +64,6 @@ public class TokenService
 
     public string GenerateMfaChallengeToken(Guid userId, string username)
     {
-        // Short-lived HS256 token for MFA challenge — different algorithm intentionally
-        var key = new SymmetricSecurityKey(RandomNumberGenerator.GetBytes(32));
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
@@ -78,10 +76,34 @@ public class TokenService
             issuer: _issuer,
             audience: _audience,
             claims: claims,
+            notBefore: DateTime.UtcNow,
             expires: DateTime.UtcNow.AddMinutes(5),
-            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+            signingCredentials: new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public ClaimsPrincipal? ValidateMfaChallengeToken(string token)
+    {
+        var parameters = GetValidationParameters();
+        var handler = new JwtSecurityTokenHandler();
+
+        try
+        {
+            var principal = handler.ValidateToken(token, parameters, out var validatedToken);
+            if (validatedToken is not JwtSecurityToken)
+                return null;
+
+            var purpose = principal.FindFirstValue("purpose");
+            if (!string.Equals(purpose, "mfa_challenge", StringComparison.Ordinal))
+                return null;
+
+            return principal;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<(string token, DateTimeOffset expiresAt)> GenerateRefreshTokenAsync(
