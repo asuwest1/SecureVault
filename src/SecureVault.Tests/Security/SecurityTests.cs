@@ -140,16 +140,46 @@ public class SecurityTests : IAsyncLifetime
     [Fact]
     public async Task RegularUser_CannotAccess_AdminEndpoints()
     {
-        var token = await SetupAndLoginAsync();
+        var adminToken = await SetupAndLoginAsync();
         _client!.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
 
         // Super admin endpoint should be accessible with super admin token
-        // (We're using the super admin from setup)
         var auditResponse = await _client.GetAsync("/api/v1/audit");
         auditResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // TODO: Create a non-admin user and verify they get 404/403
+        // Create a regular (non-admin) user via admin token
+        var createUserResponse = await _client.PostAsJsonAsync("/api/v1/users", new
+        {
+            Username = "regularuser",
+            Email = "regular@test.com",
+            Password = "RegularUser123!",
+            IsSuperAdmin = false
+        });
+        createUserResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Login as the regular user
+        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            Username = "regularuser",
+            Password = "RegularUser123!"
+        });
+        var login = await loginResponse.Content.ReadFromJsonAsync<LoginResult>();
+        login.Should().NotBeNull();
+
+        // Switch to regular user token
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", login!.AccessToken);
+
+        // Verify regular user is denied access to admin-only endpoints
+        var adminEndpoints = new[] { "/api/v1/audit", "/api/v1/users" };
+
+        foreach (var endpoint in adminEndpoints)
+        {
+            var response = await _client.GetAsync(endpoint);
+            response.StatusCode.Should().NotBe(HttpStatusCode.OK,
+                because: $"regular user must be denied access to admin endpoint {endpoint}");
+        }
     }
 
     /// <summary>
@@ -164,8 +194,7 @@ public class SecurityTests : IAsyncLifetime
         {
             AdminUsername = "attacker",
             AdminEmail = "attacker@evil.com",
-            AdminPassword = "Attacker123!",
-            KeyFilePath = "/tmp/attacker.key"
+            AdminPassword = "Attacker123!"
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.Gone,
@@ -178,8 +207,7 @@ public class SecurityTests : IAsyncLifetime
         {
             AdminUsername = "secadmin",
             AdminEmail = "secadmin@test.com",
-            AdminPassword = "SecAdmin123!",
-            KeyFilePath = Environment.GetEnvironmentVariable("SECUREVAULT_KEY_FILE")
+            AdminPassword = "SecAdmin123!"
         });
 
         var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new

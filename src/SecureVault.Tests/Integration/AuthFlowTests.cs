@@ -71,7 +71,7 @@ public class AuthFlowTests : IAsyncLifetime
             AdminUsername = "admin",
             AdminEmail = "admin@test.com",
             AdminPassword = "TestAdmin123!",
-            KeyFilePath = Environment.GetEnvironmentVariable("SECUREVAULT_KEY_FILE")
+            // KeyFilePath removed — derived from server configuration
         });
         initResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -109,7 +109,7 @@ public class AuthFlowTests : IAsyncLifetime
             AdminUsername = "locktest",
             AdminEmail = "lock@test.com",
             AdminPassword = "TestLock123!",
-            KeyFilePath = Environment.GetEnvironmentVariable("SECUREVAULT_KEY_FILE")
+            // KeyFilePath removed — derived from server configuration
         });
 
         // 5 failed login attempts
@@ -163,7 +163,7 @@ public class AuthFlowTests : IAsyncLifetime
             AdminUsername = "logouttest",
             AdminEmail = "logout@test.com",
             AdminPassword = "Logout123!",
-            KeyFilePath = Environment.GetEnvironmentVariable("SECUREVAULT_KEY_FILE")
+            // KeyFilePath removed — derived from server configuration
         });
     }
 

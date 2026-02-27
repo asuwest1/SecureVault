@@ -20,21 +20,15 @@ public class TokenService
     private readonly string _audience;
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
 
-    public TokenService(IConfiguration configuration, IDbContextFactory<AppDbContext> dbFactory)
+    public TokenService(
+        IConfiguration configuration,
+        IDbContextFactory<AppDbContext> dbFactory,
+        RsaSecurityKey signingKey)
     {
         _dbFactory = dbFactory;
         _issuer = configuration["Auth:JwtIssuer"] ?? "SecureVault";
         _audience = configuration["Auth:JwtAudience"] ?? "SecureVault";
-
-        var keyPath = configuration["Auth:JwtSigningKeyPath"]
-            ?? throw new InvalidOperationException("Auth:JwtSigningKeyPath is required.");
-
-        if (!File.Exists(keyPath))
-            throw new FileNotFoundException($"JWT signing key not found at '{keyPath}'.", keyPath);
-
-        var rsa = RSA.Create();
-        rsa.ImportFromPem(File.ReadAllText(keyPath));
-        _signingKey = new RsaSecurityKey(rsa);
+        _signingKey = signingKey;
     }
 
     public string GenerateAccessToken(User user, IEnumerable<Guid> roleIds)
@@ -133,25 +127,28 @@ public class TokenService
         var tokenHash = ComputeHash(rawToken);
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        // Atomic revocation: UPDATE ... WHERE is_revoked = false RETURNING the row.
+        // If 0 rows updated, the token was already used (potential theft) or doesn't exist.
+        var rowsAffected = await db.RefreshTokens
+            .Where(rt => rt.TokenHash == tokenHash
+                && !rt.IsRevoked
+                && rt.ExpiresAt > DateTimeOffset.UtcNow)
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(rt => rt.IsRevoked, true),
+                cancellationToken);
+
+        if (rowsAffected == 0) return null;
+
+        // Token was atomically revoked — now load the user for the new token
         var refreshToken = await db.RefreshTokens
             .Include(rt => rt.User)
             .ThenInclude(u => u.UserRoles)
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                rt => rt.TokenHash == tokenHash
-                    && !rt.IsRevoked
-                    && rt.ExpiresAt > DateTimeOffset.UtcNow,
-                cancellationToken);
+            .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
 
-        if (refreshToken == null) return null;
-
-        // Rotate: revoke old token
-        var tracked = await db.RefreshTokens.FindAsync([refreshToken.Id], cancellationToken);
-        if (tracked != null)
-        {
-            tracked.IsRevoked = true;
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        if (refreshToken?.User is not { IsActive: true })
+            return null;
 
         return refreshToken.User;
     }

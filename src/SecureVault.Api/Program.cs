@@ -59,12 +59,16 @@ builder.Services.AddHostedService<RetentionCleanupJob>();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // JWT Authentication — RS256, no clock skew
+// Single RsaSecurityKey instance shared between JWT validation and TokenService.
 // ─────────────────────────────────────────────────────────────────────────────
 var jwtKeyPath = builder.Configuration["Auth:JwtSigningKeyPath"]
     ?? throw new InvalidOperationException("Auth:JwtSigningKeyPath is required.");
 var rsa = RSA.Create();
 rsa.ImportFromPem(File.ReadAllText(jwtKeyPath));
 var jwtSigningKey = new RsaSecurityKey(rsa);
+
+// Register as singleton so TokenService receives the same key instance
+builder.Services.AddSingleton(jwtSigningKey);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

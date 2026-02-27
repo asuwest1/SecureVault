@@ -36,4 +36,14 @@ public interface IPermissionService
         IEnumerable<Guid> roleIds,
         bool isSuperAdmin,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns IDs of all folders the user has at least one permission on.
+    /// Used for filtering folder listings.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> GetAccessibleFolderIdsAsync(
+        Guid userId,
+        IEnumerable<Guid> roleIds,
+        bool isSuperAdmin,
+        CancellationToken cancellationToken = default);
 }

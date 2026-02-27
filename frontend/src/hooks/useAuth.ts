@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore, decodeJwtPayload } from '@/stores/authStore'
-import { authApi } from '@/api'
+import { authApi, silentRefresh as apiSilentRefresh } from '@/api'
 
 export function useAuth() {
   const store = useAuthStore()
@@ -31,22 +31,9 @@ export function useAuth() {
     }
   }, [store, navigate])
 
-  const silentRefresh = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await authApi.refresh()
-      if (!res.ok) {
-        store.clearAuth()
-        return false
-      }
-      const data = await res.json()
-      const payload = decodeJwtPayload(data.accessToken)
-      if (payload) store.setAuth(data.accessToken, payload)
-      return true
-    } catch {
-      store.clearAuth()
-      return false
-    }
-  }, [store])
+  // Delegate to the single silentRefresh implementation in the API module
+  // to avoid duplicating token refresh logic.
+  const silentRefresh = useCallback(() => apiSilentRefresh(), [])
 
   return {
     isAuthenticated: store.isAuthenticated(),

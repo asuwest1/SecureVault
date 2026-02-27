@@ -32,13 +32,18 @@ public class FoldersController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
+        var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
+
+        // Filter folders by user permissions — only return folders the user can access
+        var accessibleIds = await _permissions.GetAccessibleFolderIdsAsync(userId, roleIds, isSuperAdmin, ct);
+
         var folders = await _db.Folders
             .AsNoTracking()
-            .Where(f => f.ParentFolderId == null)
+            .Where(f => f.ParentFolderId == null && accessibleIds.Contains(f.Id))
             .Include(f => f.Children)
             .ToListAsync(ct);
 
-        return Ok(folders.Select(MapFolder));
+        return Ok(folders.Select(f => MapFolderFiltered(f, accessibleIds)));
     }
 
     [HttpGet("{id:guid}")]
@@ -190,6 +195,12 @@ public class FoldersController : ControllerBase
     private static FolderResponse MapFolder(Folder f) =>
         new(f.Id, f.Name, f.ParentFolderId, f.Depth, f.CreatedAt,
             f.Children?.Select(MapFolder).ToList() ?? []);
+
+    /// <summary>Only includes children the user has permission to see.</summary>
+    private static FolderResponse MapFolderFiltered(Folder f, IReadOnlySet<Guid> accessibleIds) =>
+        new(f.Id, f.Name, f.ParentFolderId, f.Depth, f.CreatedAt,
+            f.Children?.Where(c => accessibleIds.Contains(c.Id))
+                .Select(c => MapFolderFiltered(c, accessibleIds)).ToList() ?? []);
 
     private (Guid userId, List<Guid> roleIds, bool isSuperAdmin) GetCallerInfo()
     {

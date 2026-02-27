@@ -88,38 +88,59 @@ cat > "${WORK_DIR}/manifest.json" <<EOF
 EOF
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 4: Tar and encrypt
+# Step 4: Tar, encrypt with authenticated encryption, and compute HMAC
+# Uses AES-256-CTR for encryption + HMAC-SHA256 for integrity (Encrypt-then-MAC).
+# OpenSSL CLI does not support AES-256-GCM for streaming, so we use CTR + HMAC
+# which provides equivalent authenticated encryption guarantees.
 # ─────────────────────────────────────────────────────────────────────────────
 BACKUP_FILE="${BACKUP_DIR}/${BACKUP_NAME}.tar.gz.enc"
-SALT=$(openssl rand -hex 16)
+HMAC_FILE="${BACKUP_FILE}.hmac"
 
 echo "[$(date -u +%H:%M:%S)] Encrypting backup..."
 tar -czf - -C "${WORK_DIR}" . | \
-    openssl enc -aes-256-cbc -salt -S "${SALT}" \
+    openssl enc -aes-256-ctr \
         -pass "file:${PASSPHRASE_FILE}" \
         -pbkdf2 -iter 600000 \
+        -salt \
         -out "${BACKUP_FILE}"
+
+# Compute HMAC-SHA256 over the ciphertext (Encrypt-then-MAC)
+openssl dgst -sha256 -hmac "$(cat "${PASSPHRASE_FILE}")" \
+    -out "${HMAC_FILE}" "${BACKUP_FILE}"
 
 echo "[$(date -u +%H:%M:%S)] Encrypted backup: ${BACKUP_FILE} ($(du -sh "${BACKUP_FILE}" | cut -f1))"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 5: Verify integrity immediately after creation
+# Verify HMAC first (authenticity), then decrypt to verify archive structure.
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[$(date -u +%H:%M:%S)] Verifying backup integrity..."
-if ! openssl enc -d -aes-256-cbc \
+
+EXPECTED_HMAC=$(cat "${HMAC_FILE}")
+ACTUAL_HMAC=$(openssl dgst -sha256 -hmac "$(cat "${PASSPHRASE_FILE}")" "${BACKUP_FILE}")
+
+if [[ "${EXPECTED_HMAC}" != "${ACTUAL_HMAC}" ]]; then
+    echo "ERROR: Backup HMAC verification FAILED. Removing corrupt backup." >&2
+    rm -f "${BACKUP_FILE}" "${HMAC_FILE}"
+    exit 1
+fi
+
+if ! openssl enc -d -aes-256-ctr \
     -pass "file:${PASSPHRASE_FILE}" \
     -pbkdf2 -iter 600000 \
     -in "${BACKUP_FILE}" | tar -tzf - > /dev/null 2>&1; then
-    echo "ERROR: Backup integrity verification FAILED. Removing corrupt backup." >&2
-    rm -f "${BACKUP_FILE}"
+    echo "ERROR: Backup decryption verification FAILED. Removing corrupt backup." >&2
+    rm -f "${BACKUP_FILE}" "${HMAC_FILE}"
     exit 1
 fi
-echo "[$(date -u +%H:%M:%S)] Backup integrity verified."
+echo "[$(date -u +%H:%M:%S)] Backup integrity and authenticity verified."
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 6: Purge old backups
 # ─────────────────────────────────────────────────────────────────────────────
 find "${BACKUP_DIR}" -name "securevault-backup-*.tar.gz.enc" \
+    -mtime "+${RETENTION_DAYS}" -delete
+find "${BACKUP_DIR}" -name "securevault-backup-*.tar.gz.enc.hmac" \
     -mtime "+${RETENTION_DAYS}" -delete
 echo "[$(date -u +%H:%M:%S)] Old backups purged (retention: ${RETENTION_DAYS} days)"
 
