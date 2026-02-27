@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  id-token: write        # For cosign keyless signing (main branch only)
+  packages: write        # For GHCR push (main branch only)
+  security-events: write # For code scanning results
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend build and lint
+  # ─────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (npm ci — fails if lock file out of sync)
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript type check
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: npm audit (fail on high/critical)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # .NET build and unit tests
+  # ─────────────────────────────────────────────────────────────────────────
+  dotnet-build:
+    name: .NET Build & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore (fail if lock files out of sync)
+        run: dotnet restore --use-lock-file
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Run unit tests with coverage
+        run: |
+          dotnet test src/SecureVault.Tests/SecureVault.Tests.csproj \
+            --no-build -c Release \
+            --filter "Category!=Integration&Category!=Security" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage
+
+      - name: Check coverage threshold (≥80%)
+        run: |
+          # Extract line coverage from coverage report
+          COVERAGE=$(grep -oP 'line-rate="\K[^"]+' coverage/**/coverage.cobertura.xml | head -1)
+          THRESHOLD="0.8"
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "Coverage ${COVERAGE} is below threshold ${THRESHOLD}"
+            exit 1
+          fi
+          echo "Coverage: ${COVERAGE} (threshold: ${THRESHOLD})"
+
+      - name: Check for vulnerable packages (fail on Critical/High)
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          # dotnet list package doesn't exit non-zero by default — grep for issues
+          if grep -qE "Critical|High" vuln-report.txt; then
+            echo "Critical or High severity vulnerabilities found!"
+            cat vuln-report.txt
+            exit 1
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Integration and security tests (Testcontainers requires Docker)
+  # ─────────────────────────────────────────────────────────────────────────
+  integration-tests:
+    name: Integration & Security Tests
+    runs-on: ubuntu-latest
+    needs: [dotnet-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore --use-lock-file
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Run integration tests (real PostgreSQL via Testcontainers)
+        run: |
+          dotnet test src/SecureVault.Tests/SecureVault.Tests.csproj \
+            --no-build -c Release \
+            --filter "Category=Integration|Category=Security" \
+            --results-directory ./test-results
+        env:
+          # Integration tests use Testcontainers — no real keys needed
+          # Keys are generated ephemerally in test setup
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "false"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Trivy filesystem security scan
+  # ─────────────────────────────────────────────────────────────────────────
+  trivy-scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy FS scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          format: "sarif"
+          output: "trivy-results.sarif"
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Docker build + cosign sign (main branch only)
+  # ─────────────────────────────────────────────────────────────────────────
+  docker-build-push:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [frontend, dotnet-build, integration-tests, trivy-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        id: build-push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with cosign (keyless via GitHub OIDC)
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}
+        env:
+          COSIGN_EXPERIMENTAL: "1"

@@ -1,0 +1,32 @@
+# Secrets — NEVER commit these
+.env
+*.key
+*.pem
+secrets/
+nginx/certs/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+packages/
+TestResults/
+coverage/
+*.nupkg
+
+# Packages lock files (committed intentionally)
+# packages.lock.json — DO commit this (use-lock-file)
+# package-lock.json — DO commit this (npm ci)
+
+# Node
+node_modules/
+frontend/dist/
+
+# Docker
+docker-compose.override.local.yml
+
+# OS
+.DS_Store
+Thumbs.db
