@@ -36,8 +36,7 @@ public class SetupController : ControllerBase
         try
         {
             await _firstRun.InitializeAsync(
-                request.AdminUsername, request.AdminEmail, request.AdminPassword,
-                request.KeyFilePath, ct);
+                request.AdminUsername, request.AdminEmail, request.AdminPassword, ct);
 
             return Ok(new { message = "System initialized successfully." });
         }
@@ -51,6 +50,5 @@ public class SetupController : ControllerBase
 public record InitializeRequest(
     string AdminUsername,
     string AdminEmail,
-    string AdminPassword,
-    string KeyFilePath
+    string AdminPassword
 );

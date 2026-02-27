@@ -69,13 +69,14 @@ public class AuditController : ControllerBase
         await using var writer = new StreamWriter(Response.Body, Encoding.UTF8);
         await writer.WriteLineAsync("id,event_time,action,actor_username,actor_user_id,target_type,target_id,ip_address");
 
-        var query = _db.AuditLogs.AsNoTracking().OrderBy(a => a.EventTime).AsAsyncEnumerable();
+        // Apply date filters in SQL to avoid loading the entire audit table into memory
+        IQueryable<Core.Entities.AuditLog> query = _db.AuditLogs.AsNoTracking();
+        if (from.HasValue) query = query.Where(a => a.EventTime >= from);
+        if (to.HasValue) query = query.Where(a => a.EventTime <= to);
+        var stream = query.OrderBy(a => a.EventTime).AsAsyncEnumerable();
 
-        await foreach (var entry in query.WithCancellation(ct))
+        await foreach (var entry in stream.WithCancellation(ct))
         {
-            if (from.HasValue && entry.EventTime < from) continue;
-            if (to.HasValue && entry.EventTime > to) break;
-
             await writer.WriteLineAsync(
                 $"{entry.Id},{entry.EventTime:o},{entry.Action},{CsvEscape(entry.ActorUsername)}," +
                 $"{entry.ActorUserId},{entry.TargetType},{entry.TargetId},{entry.IpAddress}");

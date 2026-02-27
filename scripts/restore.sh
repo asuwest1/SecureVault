@@ -51,10 +51,26 @@ done
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 1: Decrypt and extract
+# Step 1: Verify HMAC authenticity, then decrypt and extract
+# HMAC verification MUST happen before decryption to prevent oracle attacks.
 # ─────────────────────────────────────────────────────────────────────────────
+HMAC_FILE="${BACKUP_FILE}.hmac"
+if [[ -f "${HMAC_FILE}" ]]; then
+    echo "[$(date -u +%H:%M:%S)] Verifying backup HMAC..."
+    EXPECTED_HMAC=$(cat "${HMAC_FILE}")
+    ACTUAL_HMAC=$(openssl dgst -sha256 -hmac "$(cat "${PASSPHRASE_FILE}")" "${BACKUP_FILE}")
+    if [[ "${EXPECTED_HMAC}" != "${ACTUAL_HMAC}" ]]; then
+        echo "ERROR: Backup HMAC verification FAILED. Backup may have been tampered with." >&2
+        exit 1
+    fi
+    echo "[$(date -u +%H:%M:%S)] HMAC verification passed."
+else
+    echo "WARNING: No HMAC file found at ${HMAC_FILE}. Backup authenticity cannot be verified." >&2
+    echo "         This backup may have been created with an older version." >&2
+fi
+
 echo "[$(date -u +%H:%M:%S)] Decrypting backup..."
-openssl enc -d -aes-256-cbc \
+openssl enc -d -aes-256-ctr \
     -pass "file:${PASSPHRASE_FILE}" \
     -pbkdf2 -iter 600000 \
     -in "${BACKUP_FILE}" | tar -xzf - -C "${WORK_DIR}"

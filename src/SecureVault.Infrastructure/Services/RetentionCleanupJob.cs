@@ -93,8 +93,8 @@ public class RetentionCleanupJob : BackgroundService
     private static async Task WaitUntilMidnightUtcAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        var midnight = now.Date.AddDays(1);
-        var delay = midnight - now.DateTime;
+        var nextMidnight = new DateTimeOffset(now.UtcDateTime.Date.AddDays(1), TimeSpan.Zero);
+        var delay = nextMidnight - now;
 
         if (delay.TotalMilliseconds > 0)
             await Task.Delay(delay, cancellationToken);

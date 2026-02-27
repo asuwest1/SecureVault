@@ -19,8 +19,9 @@ let refreshPromise: Promise<boolean> | null = null
 /**
  * Silent token refresh via HttpOnly cookie.
  * Returns true if successful.
+ * Exported so useAuth hook can delegate to this single implementation.
  */
-async function silentRefresh(): Promise<boolean> {
+export async function silentRefresh(): Promise<boolean> {
   if (isRefreshing && refreshPromise) return refreshPromise
 
   isRefreshing = true

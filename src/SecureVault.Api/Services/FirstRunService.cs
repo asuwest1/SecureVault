@@ -45,7 +45,6 @@ public class FirstRunService
         string adminUsername,
         string adminEmail,
         string adminPassword,
-        string keyFilePath,
         CancellationToken ct = default)
     {
         await _lock.WaitAsync(ct);
@@ -59,20 +58,22 @@ public class FirstRunService
 
             ValidatePasswordStrength(adminPassword);
 
+            // Derive key file path from server configuration — never from user input
+            var keyFilePath = Environment.GetEnvironmentVariable("SECUREVAULT_KEY_FILE")
+                ?? _config["Encryption:KeyFilePath"]
+                ?? throw new InvalidOperationException(
+                    "MEK key file path not configured. Set SECUREVAULT_KEY_FILE environment variable " +
+                    "or Encryption:KeyFilePath in appsettings.");
+
             // 1. Generate 32-byte MEK
             var mek = new byte[32];
             RandomNumberGenerator.Fill(mek);
             var dir = Path.GetDirectoryName(keyFilePath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             await File.WriteAllBytesAsync(keyFilePath, mek, ct);
-            // chmod 400 on Unix
-            if (!OperatingSystem.IsWindows())
-            {
-                var chmod = System.Diagnostics.Process.Start("chmod", $"400 {keyFilePath}");
-                await chmod!.WaitForExitAsync(ct);
-            }
+            SetRestrictedFilePermissions(keyFilePath);
             CryptographicOperations.ZeroMemory(mek);
-            _logger.LogInformation("MEK generated and written to {Path}", keyFilePath);
+            _logger.LogInformation("MEK generated and written to configured path");
 
             // 2. Generate 2048-bit RSA key pair for JWT signing
             var jwtKeyPath = _config["Auth:JwtSigningKeyPath"]
@@ -81,12 +82,8 @@ public class FirstRunService
             using var rsa = RSA.Create(2048);
             var privateKeyPem = rsa.ExportRSAPrivateKeyPem();
             await File.WriteAllTextAsync(jwtKeyPath, privateKeyPem, ct);
-            if (!OperatingSystem.IsWindows())
-            {
-                var chmod = System.Diagnostics.Process.Start("chmod", $"400 {jwtKeyPath}");
-                await chmod!.WaitForExitAsync(ct);
-            }
-            _logger.LogInformation("JWT RSA key pair generated at {Path}", jwtKeyPath);
+            SetRestrictedFilePermissions(jwtKeyPath);
+            _logger.LogInformation("JWT RSA key pair generated");
 
             // 3. Create Super Admin user
             var admin = new User
@@ -123,7 +120,6 @@ public class FirstRunService
                 admin.Username,
                 detail: new Dictionary<string, object?>
                 {
-                    ["key_file"] = keyFilePath,
                     ["admin_username"] = adminUsername
                 });
 
@@ -134,6 +130,18 @@ public class FirstRunService
         finally
         {
             _lock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Sets file permissions to owner-read-only (400) using .NET 8 API.
+    /// Avoids Process.Start("chmod") which is vulnerable to path injection.
+    /// </summary>
+    private static void SetRestrictedFilePermissions(string filePath)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(filePath, UnixFileMode.UserRead);
         }
     }
 

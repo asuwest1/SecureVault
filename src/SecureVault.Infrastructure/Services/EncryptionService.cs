@@ -161,22 +161,30 @@ public sealed class EncryptionService : IEncryptionService, IDisposable
     {
         ArgumentException.ThrowIfNullOrEmpty(password);
 
-        var config = new Argon2Config
+        var passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
+        try
         {
-            Type = Argon2Type.DataIndependentAddressing,  // Argon2id
-            Version = Argon2Version.Nineteen,
-            TimeCost = 3,
-            MemoryCost = 65536,  // 64 MB
-            Lanes = 4,
-            Threads = 4,
-            HashLength = 32,
-            Password = System.Text.Encoding.UTF8.GetBytes(password),
-            Salt = GenerateRandomSalt(16)
-        };
+            var config = new Argon2Config
+            {
+                Type = Argon2Type.HybridAddressing,  // Argon2id (hybrid of Argon2i + Argon2d)
+                Version = Argon2Version.Nineteen,
+                TimeCost = 3,
+                MemoryCost = 65536,  // 64 MB
+                Lanes = 4,
+                Threads = 4,
+                HashLength = 32,
+                Password = passwordBytes,
+                Salt = GenerateRandomSalt(16)
+            };
 
-        using var argon2 = new Argon2(config);
-        using var hashResult = argon2.Hash();
-        return config.EncodeString(hashResult.Buffer);
+            using var argon2 = new Argon2(config);
+            using var hashResult = argon2.Hash();
+            return config.EncodeString(hashResult.Buffer);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(passwordBytes);
+        }
     }
 
     public bool VerifyPassword(string password, string hash)
@@ -184,7 +192,15 @@ public sealed class EncryptionService : IEncryptionService, IDisposable
         ArgumentException.ThrowIfNullOrEmpty(password);
         ArgumentException.ThrowIfNullOrEmpty(hash);
 
-        return Argon2.Verify(hash, System.Text.Encoding.UTF8.GetBytes(password));
+        var passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
+        try
+        {
+            return Argon2.Verify(hash, passwordBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(passwordBytes);
+        }
     }
 
     private static byte[] GenerateRandomSalt(int length)

@@ -175,4 +175,56 @@ public class PermissionService : IPermissionService
 
         return ids;
     }
+
+    public async Task<IReadOnlySet<Guid>> GetAccessibleFolderIdsAsync(
+        Guid userId,
+        IEnumerable<Guid> roleIds,
+        bool isSuperAdmin,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+
+        if (isSuperAdmin)
+        {
+            var allIds = await db.Folders
+                .AsNoTracking()
+                .Select(f => f.Id)
+                .ToListAsync(cancellationToken);
+            return allIds.ToHashSet();
+        }
+
+        var roleIdList = roleIds.ToList();
+        if (roleIdList.Count == 0) return new HashSet<Guid>();
+
+        // Return folder IDs where the user has any permission via folder ACL hierarchy,
+        // plus all ancestor folders (so the tree can be rendered).
+        var sql = @"
+            WITH RECURSIVE
+            -- Folders with direct ACL for user's roles
+            acl_folders AS (
+                SELECT DISTINCT fa.folder_id AS id
+                FROM folder_acl fa
+                WHERE fa.role_id = ANY({0})
+                AND fa.permissions > 0
+            ),
+            -- Walk UP to include all ancestor folders for tree rendering
+            ancestors AS (
+                SELECT f.id, f.parent_folder_id
+                FROM folders f
+                WHERE f.id IN (SELECT id FROM acl_folders)
+                UNION
+                SELECT f.id, f.parent_folder_id
+                FROM folders f
+                JOIN ancestors a ON a.parent_folder_id = f.id
+            )
+            SELECT DISTINCT id FROM ancestors
+        ";
+
+        var roleIdArray = roleIdList.ToArray();
+        var ids = await db.Database
+            .SqlQueryRaw<Guid>(sql, roleIdArray)
+            .ToListAsync(cancellationToken);
+
+        return ids.ToHashSet();
+    }
 }

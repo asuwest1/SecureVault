@@ -109,9 +109,10 @@ public class SecretsController : ControllerBase
         if (secret == null) return NotFound();
 
         var dek = _encryption.UnwrapDek(secret.DekEnc);
+        byte[]? plaintext = null;
         try
         {
-            var plaintext = _encryption.Decrypt(secret.ValueEnc, secret.Nonce, dek);
+            plaintext = _encryption.Decrypt(secret.ValueEnc, secret.Nonce, dek);
 
             // Audit BEFORE returning to caller
             await _audit.LogAsync(
@@ -127,6 +128,7 @@ public class SecretsController : ControllerBase
         }
         finally
         {
+            if (plaintext != null) CryptographicOperations.ZeroMemory(plaintext);
             CryptographicOperations.ZeroMemory(dek);
         }
     }
@@ -153,6 +155,7 @@ public class SecretsController : ControllerBase
         var plaintext = Encoding.UTF8.GetBytes(request.Value);
         var (valueEncWithTag, nonce) = _encryption.Encrypt(plaintext, dek);
         var dekEnc = _encryption.WrapDek(dek);
+        CryptographicOperations.ZeroMemory(plaintext);
 
         try
         {
