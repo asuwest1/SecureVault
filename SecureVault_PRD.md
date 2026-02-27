@@ -50,7 +50,7 @@ This document defines the functional requirements, security architecture, user r
 - Secrets vault with CRUD operations and role-based permission enforcement.
 - AES-256 encryption of all secrets and sensitive metadata at rest.
 - Comprehensive audit logging.
-- LDAP / Active Directory integration (optional, configurable).
+- LDAP / Active Directory integration (optional, configurable) — included in v1.0.
 - RESTful API for automation and scripting.
 
 ### 3.2 Out of Scope (Version 1.0)
@@ -234,7 +234,7 @@ Permissions are additive across roles. A user holding Role A (View only) and Rol
 
 | Layer | Technology Options |
 |---|---|
-| Web / App Server | ASP.NET Core 8 (preferred) or Node.js + Express |
+| Web / App Server | ASP.NET Core 8 *(selected — see §13)* |
 | Frontend | React or Vue.js (SPA) served by the app server |
 | Database | SQL Server 2019+ or PostgreSQL 15+ |
 | Encryption Library | BouncyCastle (.NET) / libsodium (Node/Python) |
@@ -318,15 +318,17 @@ The following conditions must be validated before the application is approved fo
 
 ---
 
-## 13. Open Issues & Decisions Required
+## 13. Architecture Decisions
 
-| # | Issue | Options | Owner |
-|---|---|---|---|
-| 1 | Technology stack finalization | .NET Core vs Node.js backend | IT Manager |
-| 2 | LDAP / AD integration priority | v1.0 or defer to v1.1 | IT Manager |
-| 3 | Key management strategy | Local key file vs. OS keystore vs. HashiCorp Vault | Security Officer |
-| 4 | MFA enforcement policy | Optional or mandatory for all users | IT Manager |
-| 5 | Audit log retention period | 1 year vs. regulatory requirements | Compliance |
+All open issues from the initial draft have been resolved. Decisions are recorded below for traceability.
+
+| # | Issue | **Decision** | Rationale | Owner |
+|---|---|---|---|---|
+| 1 | Technology stack finalization | **ASP.NET Core 8 / C#** | Strongest native crypto support (AES-256-GCM, Argon2id in BCL), type safety, LTS, superior performance for CPU-bound encryption vs. Node.js. Node.js deferred for potential future API-only microservice use only. | IT Manager |
+| 2 | LDAP / AD integration priority | **v1.0 — included** | LDAP/AD is a primary deployment requirement for enterprise environments; deferral would block initial rollout for most target sites. | IT Manager |
+| 3 | Key management strategy | **Local key file** | Simplest operational model for on-premises deployments with no additional infrastructure dependency. Key file stored on a separate volume with `chmod 400`. HashiCorp Vault support planned for v2.0. | Security Officer |
+| 4 | MFA enforcement policy | **Optional** (Super Admin configurable) | MFA is supported (TOTP/RFC 6238) and can be enforced per-user or globally by a Super Admin. Mandatory enforcement deferred to allow phased rollout. | IT Manager |
+| 5 | Audit log retention period | **1 year** | Aligns with ISO/IEC 27001 and CIS Controls guidance. Configurable via `Logging:AuditRetentionDays` for sites with stricter regulatory requirements. | Compliance |
 
 ---
 
@@ -335,3 +337,4 @@ The following conditions must be validated before the application is approved fo
 | Version | Date | Author | Summary |
 |---|---|---|---|
 | 1.0 | February 2026 | IT Team | Initial draft. |
+| 1.1 | February 2026 | IT Team | Resolved all open architecture decisions: ASP.NET Core 8 selected; LDAP included in v1.0; local key file for MEK; MFA optional; audit log retention set to 1 year. |
