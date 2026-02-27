@@ -27,7 +27,7 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <!-- TOTP for MFA -->
-    <PackageReference Include="OtpNet" Version="1.4.0" />
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
     <!-- JWT token generation -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
     <!-- CSV import -->
