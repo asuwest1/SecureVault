@@ -1,8 +1,10 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AspNetCoreRateLimit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -58,14 +60,27 @@ builder.Services.AddHostedService<RetentionCleanupJob>();
 // ─────────────────────────────────────────────────────────────────────────────
 // JWT Authentication — RS256, no clock skew
 // ─────────────────────────────────────────────────────────────────────────────
-var tokenService = builder.Services.BuildServiceProvider().GetService<TokenService>();
+var jwtKeyPath = builder.Configuration["Auth:JwtSigningKeyPath"]
+    ?? throw new InvalidOperationException("Auth:JwtSigningKeyPath is required.");
+var rsa = RSA.Create();
+rsa.ImportFromPem(File.ReadAllText(jwtKeyPath));
+var jwtSigningKey = new RsaSecurityKey(rsa);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Validation parameters are loaded from TokenService at startup
-        // Use a lazy approach if TokenService requires DB; for now configure inline
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Auth:JwtIssuer"] ?? "SecureVault",
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Auth:JwtAudience"] ?? "SecureVault",
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero,
+            IssuerSigningKey = jwtSigningKey,
+            ValidAlgorithms = [SecurityAlgorithms.RsaSha256]
+        };
         options.Events = new JwtBearerEvents
         {
             OnChallenge = ctx =>
@@ -191,7 +206,6 @@ static object ScrubSensitiveFields(object obj)
     if (obj is not IDictionary<string, object> dict) return obj;
 
     var scrubbed = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-    var sensitivePattern = System.Text.RegularExpressions.Regex.IsMatch;
 
     foreach (var (key, value) in dict)
     {
