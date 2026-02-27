@@ -24,8 +24,9 @@
     <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
     <!-- Structured logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
-    <!-- Data annotations for model validation -->
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.DataAnnotations" Version="8.0.10" />
+    <!-- Note: Microsoft.AspNetCore.Mvc.DataAnnotations is part of the ASP.NET Core shared
+         framework and is included automatically via Microsoft.NET.Sdk.Web — no explicit
+         PackageReference needed (and 8.x versions are not available on nuget.org). -->
   </ItemGroup>
 
   <!-- Build frontend before Release builds -->
