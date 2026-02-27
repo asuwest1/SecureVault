@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -129,10 +130,35 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> VerifyMfa([FromBody] MfaVerifyRequest request, CancellationToken ct)
     {
-        // TODO: Validate MFA challenge JWT and extract userId
-        // Track consumed jti to prevent replay attacks
-        // For now: placeholder implementation
-        return BadRequest(new { error = "MFA verification not fully configured." });
+        var principal = _tokens.ValidateMfaChallengeToken(request.MfaToken);
+        if (principal == null)
+            return Unauthorized(new { error = "Invalid MFA challenge token." });
+
+        var sub = principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized(new { error = "Invalid MFA challenge token." });
+
+        var user = await _db.Users
+            .Include(u => u.UserRoles)
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+
+        if (user == null || !user.IsActive || !user.MfaEnabled || user.MfaSecretEnc == null)
+            return Unauthorized(new { error = "Invalid MFA challenge token." });
+
+        if (!_mfa.Verify(user.MfaSecretEnc, request.Code))
+        {
+            await HandleFailedAttemptAsync(user, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
+            return Unauthorized(new { error = "Invalid MFA code." });
+        }
+
+        user.FailedAttempts = 0;
+        user.LockedUntil = null;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        var roleIds = user.UserRoles.Select(ur => ur.RoleId).ToList();
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        return await IssueTokensAsync(user, roleIds, ip, ct);
     }
 
     [HttpPost("refresh")]
