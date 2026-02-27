@@ -60,15 +60,17 @@ builder.Services.AddHostedService<RetentionCleanupJob>();
 // ─────────────────────────────────────────────────────────────────────────────
 // JWT Authentication — RS256, no clock skew
 // Single RsaSecurityKey instance shared between JWT validation and TokenService.
+// Key loading is deferred to DI resolution so test config overrides are honored.
 // ─────────────────────────────────────────────────────────────────────────────
-var jwtKeyPath = builder.Configuration["Auth:JwtSigningKeyPath"]
-    ?? throw new InvalidOperationException("Auth:JwtSigningKeyPath is required.");
-var rsa = RSA.Create();
-rsa.ImportFromPem(File.ReadAllText(jwtKeyPath));
-var jwtSigningKey = new RsaSecurityKey(rsa);
-
-// Register as singleton so TokenService receives the same key instance
-builder.Services.AddSingleton(jwtSigningKey);
+builder.Services.AddSingleton<RsaSecurityKey>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var jwtKeyPath = config["Auth:JwtSigningKeyPath"]
+        ?? throw new InvalidOperationException("Auth:JwtSigningKeyPath is required.");
+    var rsa = RSA.Create();
+    rsa.ImportFromPem(File.ReadAllText(jwtKeyPath));
+    return new RsaSecurityKey(rsa);
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -82,7 +84,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Auth:JwtAudience"] ?? "SecureVault",
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero,
-            IssuerSigningKey = jwtSigningKey,
             ValidAlgorithms = [SecurityAlgorithms.RsaSha256]
         };
         options.Events = new JwtBearerEvents
@@ -95,6 +96,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 return ctx.Response.WriteAsync("{\"error\":\"Unauthorized\"}");
             }
         };
+    });
+
+// Inject the signing key into JWT options after DI resolves the RsaSecurityKey
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<RsaSecurityKey>((options, key) =>
+    {
+        options.TokenValidationParameters.IssuerSigningKey = key;
     });
 
 builder.Services.AddAuthorization();
