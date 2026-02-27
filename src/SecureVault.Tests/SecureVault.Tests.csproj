@@ -27,6 +27,8 @@
     <PackageReference Include="Moq" Version="4.20.72" />
     <!-- Integration test host -->
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.10" />
+    <!-- In-memory provider for fast unit tests -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.10" />
     <!-- Testcontainers for real PostgreSQL -->
     <PackageReference Include="Testcontainers.PostgreSql" Version="3.10.0" />
     <!-- Coverage -->
