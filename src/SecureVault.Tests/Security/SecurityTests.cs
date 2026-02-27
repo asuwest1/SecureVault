@@ -4,7 +4,9 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
 using SecureVault.Infrastructure.Data;
 using Xunit;
@@ -45,12 +47,16 @@ public class SecurityTests : IAsyncLifetime
             {
                 builder.ConfigureServices(services =>
                 {
-                    var descriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
-                    if (descriptor != null) services.Remove(descriptor);
+                    services.RemoveAll<DbContextOptions<AppDbContext>>();
+                    services.RemoveAll<DbContextOptions>();
+                    services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
+                    services.RemoveAll<AppDbContext>();
+                    services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
-                    services.AddDbContext<AppDbContext>(options =>
+                    services.AddDbContextFactory<AppDbContext>(options =>
                         options.UseNpgsql(_postgres.GetConnectionString()));
+                    services.AddScoped(sp =>
+                        sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
                     var mekFile = Path.GetTempFileName();
                     var mek = new byte[32];

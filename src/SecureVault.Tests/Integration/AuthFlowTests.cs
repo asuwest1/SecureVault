@@ -3,7 +3,9 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
 using SecureVault.Infrastructure.Data;
 using Xunit;
@@ -41,13 +43,19 @@ public class AuthFlowTests : IAsyncLifetime
             {
                 builder.ConfigureServices(services =>
                 {
-                    // Replace DB with test container connection
-                    var descriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
-                    if (descriptor != null) services.Remove(descriptor);
+                    // Replace DB registrations with test container connection.
+                    // Program registers both AddDbContext and AddDbContextFactory,
+                    // so clear both to avoid lifetime mismatches in tests.
+                    services.RemoveAll<DbContextOptions<AppDbContext>>();
+                    services.RemoveAll<DbContextOptions>();
+                    services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
+                    services.RemoveAll<AppDbContext>();
+                    services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
-                    services.AddDbContext<AppDbContext>(options =>
+                    services.AddDbContextFactory<AppDbContext>(options =>
                         options.UseNpgsql(_postgres.GetConnectionString()));
+                    services.AddScoped(sp =>
+                        sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
                     // Use temp MEK for tests — never hardcode keys
                     var mekFile = Path.GetTempFileName();
