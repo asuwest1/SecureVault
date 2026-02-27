@@ -143,7 +143,7 @@ public class TokenService
             .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.IsRevoked, true), cancellationToken);
     }
 
-    public SecurityTokenValidationParameters GetValidationParameters() =>
+    public TokenValidationParameters GetValidationParameters() =>
         new()
         {
             ValidateIssuer = true,
