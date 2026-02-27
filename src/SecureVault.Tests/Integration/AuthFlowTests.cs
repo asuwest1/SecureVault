@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
@@ -17,7 +18,8 @@ namespace SecureVault.Tests.Integration;
 /// </summary>
 public class AuthFlowTests : IAsyncLifetime
 {
-    private const string JwtKeyPath = "/tmp/jwt-dev.pem";
+    private readonly string _jwtKeyPath = Path.Combine(Path.GetTempPath(), $"jwt-auth-{Guid.NewGuid()}.pem");
+    private readonly string _mekFilePath = Path.GetTempFileName();
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
@@ -34,12 +36,25 @@ public class AuthFlowTests : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await _postgres.StartAsync();
-        WriteJwtKey(JwtKeyPath);
-        Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", JwtKeyPath);
+        WriteJwtKey(_jwtKeyPath);
+
+        // Generate MEK before factory creation
+        var mek = new byte[32];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(mek);
+        File.WriteAllBytes(_mekFilePath, mek);
 
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
+                builder.ConfigureAppConfiguration((_, config) =>
+                {
+                    config.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Auth:JwtSigningKeyPath"] = _jwtKeyPath,
+                        ["Encryption:KeyFilePath"] = _mekFilePath,
+                    });
+                });
+
                 builder.ConfigureServices(services =>
                 {
                     // Replace DB registrations with test container connection.
@@ -54,15 +69,6 @@ public class AuthFlowTests : IAsyncLifetime
                         options.UseNpgsql(_postgres.GetConnectionString()));
                     services.AddScoped(sp =>
                         sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
-
-                    // Use temp MEK for tests — never hardcode keys
-                    var mekFile = Path.GetTempFileName();
-                    var mek = new byte[32];
-                    System.Security.Cryptography.RandomNumberGenerator.Fill(mek);
-                    File.WriteAllBytes(mekFile, mek);
-
-                    Environment.SetEnvironmentVariable("SECUREVAULT_KEY_FILE", mekFile);
-                    Environment.SetEnvironmentVariable("Auth__JwtSigningKeyPath", JwtKeyPath);
                 });
             });
 
@@ -191,8 +197,10 @@ public class AuthFlowTests : IAsyncLifetime
         if (_factory != null) await _factory.DisposeAsync();
         await _postgres.DisposeAsync();
 
-        if (File.Exists(JwtKeyPath))
-            File.Delete(JwtKeyPath);
+        if (File.Exists(_jwtKeyPath))
+            File.Delete(_jwtKeyPath);
+        if (File.Exists(_mekFilePath))
+            File.Delete(_mekFilePath);
     }
 
     private record LoginResult(string AccessToken, string ExpiresAt, bool MfaRequired, string? MfaToken);
