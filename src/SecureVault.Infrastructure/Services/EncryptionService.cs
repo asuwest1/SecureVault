@@ -195,7 +195,14 @@ public sealed class EncryptionService : IEncryptionService, IDisposable
         var passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
         try
         {
-            return Argon2.Verify(hash, passwordBytes);
+            try
+            {
+                return Argon2.Verify(hash, passwordBytes);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
         finally
         {
