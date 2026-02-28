@@ -67,7 +67,8 @@ public class AuthFlowTests : IAsyncLifetime
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
                     services.AddDbContextFactory<AppDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString()));
+                        options.UseNpgsql(_postgres.GetConnectionString())
+                               .UseSnakeCaseNamingConvention());
                     services.AddScoped(sp =>
                         sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
                 });

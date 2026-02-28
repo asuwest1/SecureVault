@@ -200,6 +200,14 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 
+// API catch-all — return JSON 404 for unmatched API routes (prevents SPA HTML fallback for API calls)
+app.MapFallback("api/{**path}", context =>
+{
+    context.Response.StatusCode = 404;
+    context.Response.ContentType = "application/json";
+    return context.Response.WriteAsync("{\"error\":\"Not found.\"}");
+});
+
 // SPA fallback — serve index.html for client-side routes
 app.MapFallbackToFile("index.html");
 

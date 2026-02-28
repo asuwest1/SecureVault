@@ -68,7 +68,8 @@ public class SecurityTests : IAsyncLifetime
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
                     services.AddDbContextFactory<AppDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString()));
+                        options.UseNpgsql(_postgres.GetConnectionString())
+                               .UseSnakeCaseNamingConvention());
                     services.AddScoped(sp =>
                         sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
                 });
@@ -221,18 +222,23 @@ public class SecurityTests : IAsyncLifetime
 
     private async Task<string> SetupAndLoginAsync()
     {
-        await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
+        var initResponse = await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "secadmin",
             AdminEmail = "secadmin@test.com",
             AdminPassword = "SecAdmin123!"
         });
+        initResponse.StatusCode.Should().BeOneOf(
+            HttpStatusCode.OK, HttpStatusCode.Gone,
+            because: "setup should succeed or already be initialized");
 
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "secadmin",
             Password = "SecAdmin123!"
         });
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK,
+            because: "login with valid credentials should succeed");
 
         var login = await loginResponse.Content.ReadFromJsonAsync<LoginResult>();
         return login!.AccessToken;
