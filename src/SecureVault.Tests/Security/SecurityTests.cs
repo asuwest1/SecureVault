@@ -20,6 +20,7 @@ namespace SecureVault.Tests.Security;
 /// - Privilege escalation
 /// - CSRF protection
 /// </summary>
+[Trait("Category", "Security")]
 public class SecurityTests : IAsyncLifetime
 {
     private readonly string _jwtKeyPath = Path.Combine(Path.GetTempPath(), $"jwt-sec-{Guid.NewGuid()}.pem");
@@ -99,35 +100,38 @@ public class SecurityTests : IAsyncLifetime
         {
             Name = "Test Folder"
         });
+        folderResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var folder = await folderResponse.Content.ReadFromJsonAsync<FolderResult>();
+        folder.Should().NotBeNull();
 
-        await Client.PostAsJsonAsync("/api/v1/secrets", new
+        var createSecretResponse = await Client.PostAsJsonAsync("/api/v1/secrets", new
         {
             Name = "Test Secret",
             Value = plaintextSecret,
             Type = 1,  // Password
             FolderId = folder!.Id
         });
+        createSecretResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createdSecret = await createSecretResponse.Content.ReadFromJsonAsync<SecretResult>();
+        createdSecret.Should().NotBeNull();
 
         // Query raw bytes from database
         using var scope = _factory!.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var secrets = await db.Secrets.AsNoTracking().ToListAsync();
-        secrets.Should().NotBeEmpty();
+        var secret = await db.Secrets.AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == createdSecret!.Id);
+        secret.Should().NotBeNull();
 
-        foreach (var secret in secrets)
-        {
-            // Acceptance Criterion AC-4: No plaintext in database
-            var valueEncAsString = Encoding.UTF8.GetString(secret.ValueEnc);
-            valueEncAsString.Should().NotContain(plaintextSecret,
-                because: "secret values must be encrypted in the database");
+        // Acceptance Criterion AC-4: No plaintext in database
+        var valueEncAsString = Encoding.UTF8.GetString(secret!.ValueEnc);
+        valueEncAsString.Should().NotContain(plaintextSecret,
+            because: "secret values must be encrypted in the database");
 
-            // Also check that the raw bytes don't match the plaintext
-            var plaintextBytes = Encoding.UTF8.GetBytes(plaintextSecret);
-            secret.ValueEnc.Should().NotBeSubsetOf(plaintextBytes,
-                because: "encryption must transform the data");
-        }
+        // Also check that encrypted bytes do not equal plaintext bytes
+        var plaintextBytes = Encoding.UTF8.GetBytes(plaintextSecret);
+        secret.ValueEnc.Should().NotEqual(plaintextBytes,
+            because: "encryption must transform the data");
     }
 
     /// <summary>
@@ -266,4 +270,5 @@ public class SecurityTests : IAsyncLifetime
 
     private record LoginResult(string AccessToken, string ExpiresAt, bool MfaRequired);
     private record FolderResult(string Id, string Name);
+    private record SecretResult(Guid Id, string Name);
 }

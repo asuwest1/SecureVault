@@ -16,6 +16,7 @@ namespace SecureVault.Tests.Integration;
 /// Integration tests for the authentication flow using Testcontainers (real PostgreSQL 16).
 /// Tests run against real migrations — validates migration idempotency.
 /// </summary>
+[Trait("Category", "Integration")]
 public class AuthFlowTests : IAsyncLifetime
 {
     private readonly string _jwtKeyPath = Path.Combine(Path.GetTempPath(), $"jwt-auth-{Guid.NewGuid()}.pem");
