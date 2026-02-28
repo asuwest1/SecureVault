@@ -155,12 +155,16 @@ public class AuthFlowTests : IAsyncLifetime
     public async Task Logout_ClearsRefreshToken()
     {
         // Setup + login
-        await InitializeTestUserAsync();
+        var initResponse = await InitializeTestUserAsync();
+        initResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "logouttest",
-            Password = "Logout123!"
+            Password = "LogoutTest123!"
         });
+
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var login = await loginResponse.Content.ReadFromJsonAsync<LoginResult>();
 
         Client.DefaultRequestHeaders.Authorization =
@@ -174,13 +178,13 @@ public class AuthFlowTests : IAsyncLifetime
         refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    private async Task InitializeTestUserAsync()
+    private Task<HttpResponseMessage> InitializeTestUserAsync()
     {
-        await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
+        return Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "logouttest",
             AdminEmail = "logout@test.com",
-            AdminPassword = "Logout123!",
+            AdminPassword = "LogoutTest123!",
             // KeyFilePath removed — derived from server configuration
         });
     }
