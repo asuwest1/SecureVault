@@ -49,6 +49,15 @@ public class FoldersController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
+        var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
+
+        if (!isSuperAdmin)
+        {
+            var accessibleIds = await _permissions.GetAccessibleFolderIdsAsync(userId, roleIds, false, ct);
+            if (!accessibleIds.Contains(id))
+                return NotFound();
+        }
+
         var folder = await _db.Folders
             .AsNoTracking()
             .Include(f => f.Children)
