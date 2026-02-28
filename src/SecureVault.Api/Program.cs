@@ -94,6 +94,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 ctx.Response.StatusCode = 401;
                 ctx.Response.ContentType = "application/json";
                 return ctx.Response.WriteAsync("{\"error\":\"Unauthorized\"}");
+            },
+            OnForbidden = ctx =>
+            {
+                ctx.Response.StatusCode = 403;
+                ctx.Response.ContentType = "application/json";
+                return ctx.Response.WriteAsync("{\"error\":\"Forbidden\"}");
             }
         };
     });
@@ -171,6 +177,35 @@ app.UseIpRateLimiting();
 app.UseCors();
 
 app.UseStaticFiles();
+
+app.UseStatusCodePages(async statusContext =>
+{
+    var http = statusContext.HttpContext;
+    if (!http.Request.Path.StartsWithSegments("/api"))
+        return;
+
+    if (http.Response.HasStarted)
+        return;
+
+    var statusCode = http.Response.StatusCode;
+    if (statusCode < 400)
+        return;
+
+    http.Response.ContentType = "application/json";
+    await http.Response.WriteAsJsonAsync(new
+    {
+        error = statusCode switch
+        {
+            400 => "Bad request.",
+            401 => "Unauthorized",
+            403 => "Forbidden",
+            404 => "Not found.",
+            405 => "Method not allowed.",
+            410 => "Gone.",
+            _ => "Request failed."
+        }
+    });
+});
 
 // Setup check middleware: return 410 Gone for setup routes once initialized
 app.UseWhen(

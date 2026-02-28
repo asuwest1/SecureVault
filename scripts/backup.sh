@@ -104,9 +104,10 @@ tar -czf - -C "${WORK_DIR}" . | \
         -salt \
         -out "${BACKUP_FILE}"
 
-# Compute HMAC-SHA256 over the ciphertext (Encrypt-then-MAC)
-openssl dgst -sha256 -hmac "$(cat "${PASSPHRASE_FILE}")" \
-    -out "${HMAC_FILE}" "${BACKUP_FILE}"
+# Compute HMAC-SHA256 over the ciphertext (Encrypt-then-MAC).
+# Use key:file to avoid passing the passphrase itself on the process command line.
+openssl dgst -sha256 -mac HMAC -macopt "key:file:${PASSPHRASE_FILE}" \
+    -binary "${BACKUP_FILE}" | xxd -p -c 256 > "${HMAC_FILE}"
 
 echo "[$(date -u +%H:%M:%S)] Encrypted backup: ${BACKUP_FILE} ($(du -sh "${BACKUP_FILE}" | cut -f1))"
 
@@ -116,8 +117,9 @@ echo "[$(date -u +%H:%M:%S)] Encrypted backup: ${BACKUP_FILE} ($(du -sh "${BACKU
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[$(date -u +%H:%M:%S)] Verifying backup integrity..."
 
-EXPECTED_HMAC=$(cat "${HMAC_FILE}")
-ACTUAL_HMAC=$(openssl dgst -sha256 -hmac "$(cat "${PASSPHRASE_FILE}")" "${BACKUP_FILE}")
+EXPECTED_HMAC=$(<"${HMAC_FILE}")
+ACTUAL_HMAC=$(openssl dgst -sha256 -mac HMAC -macopt "key:file:${PASSPHRASE_FILE}" \
+    -binary "${BACKUP_FILE}" | xxd -p -c 256)
 
 if [[ "${EXPECTED_HMAC}" != "${ACTUAL_HMAC}" ]]; then
     echo "ERROR: Backup HMAC verification FAILED. Removing corrupt backup." >&2
