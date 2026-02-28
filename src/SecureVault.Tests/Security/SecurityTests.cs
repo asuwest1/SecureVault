@@ -229,8 +229,8 @@ public class SecurityTests : IAsyncLifetime
             AdminPassword = "SecAdmin123!"
         });
         initResponse.StatusCode.Should().BeOneOf(
-            HttpStatusCode.OK, HttpStatusCode.Gone,
-            because: "setup should succeed or already be initialized");
+            new[] { HttpStatusCode.OK, HttpStatusCode.Gone },
+            "setup should succeed or already be initialized");
 
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
