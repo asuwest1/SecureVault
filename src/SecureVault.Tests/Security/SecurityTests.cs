@@ -221,18 +221,24 @@ public class SecurityTests : IAsyncLifetime
 
     private async Task<string> SetupAndLoginAsync()
     {
-        await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
+        var setupResponse = await Client.PostAsJsonAsync("/api/v1/setup/initialize", new
         {
             AdminUsername = "secadmin",
             AdminEmail = "secadmin@test.com",
             AdminPassword = "SecAdmin123!"
         });
 
+        setupResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Gone,
+            because: "setup should be idempotent when integration environments are reused");
+
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Username = "secadmin",
             Password = "SecAdmin123!"
         });
+
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK,
+            because: "a valid bootstrap admin must be able to authenticate for security test setup");
 
         var login = await loginResponse.Content.ReadFromJsonAsync<LoginResult>();
         return login!.AccessToken;
