@@ -117,7 +117,7 @@ echo "[$(date -u +%H:%M:%S)] Encrypted backup: ${BACKUP_FILE} ($(du -sh "${BACKU
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[$(date -u +%H:%M:%S)] Verifying backup integrity..."
 
-EXPECTED_HMAC=$(<"${HMAC_FILE}")
+EXPECTED_HMAC=$(tr -d '[:space:]' < "${HMAC_FILE}")
 ACTUAL_HMAC=$(openssl dgst -sha256 -mac HMAC -macopt "key:file:${PASSPHRASE_FILE}" \
     -binary "${BACKUP_FILE}" | xxd -p -c 256)
 
