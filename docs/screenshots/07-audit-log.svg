@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#f8fafc"/>
+
+  <!-- Back arrow + title row -->
+  <text x="90" y="68" font-size="20" fill="#94a3b8">←</text>
+  <text x="122" y="68" font-size="20" font-weight="600" fill="#0f172a">Audit Log</text>
+
+  <!-- Export CSV button -->
+  <rect x="1076" y="48" width="104" height="32" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <!-- Download icon -->
+  <line x1="1094" y1="58" x2="1094" y2="67" stroke="#475569" stroke-width="1.3"/>
+  <polyline points="1090,64 1094,68 1098,64" fill="none" stroke="#475569" stroke-width="1.3"/>
+  <text x="1105" y="69" font-size="13" fill="#0f172a">Export CSV</text>
+
+  <!-- Table container -->
+  <rect x="90" y="92" width="1100" height="560" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Table header -->
+  <rect x="90" y="92" width="1100" height="40" rx="8" fill="#f8fafc"/>
+  <rect x="90" y="112" width="1100" height="20" fill="#f8fafc"/>
+  <text x="110" y="117" font-size="12" font-weight="600" fill="#64748b">TIME</text>
+  <text x="285" y="117" font-size="12" font-weight="600" fill="#64748b">ACTION</text>
+  <text x="520" y="117" font-size="12" font-weight="600" fill="#64748b">ACTOR</text>
+  <text x="700" y="117" font-size="12" font-weight="600" fill="#64748b">TARGET</text>
+  <text x="980" y="117" font-size="12" font-weight="600" fill="#64748b">IP ADDRESS</text>
+
+  <line x1="90" y1="132" x2="1190" y2="132" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Helper macro for rows (can't do macros in SVG so inline them) -->
+
+  <!-- Row 1 -->
+  <rect x="90" y="132" width="1100" height="42" fill="white"/>
+  <text x="110" y="158" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 14:32:18</text>
+  <rect x="285" y="144" width="90" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="330" y="158" text-anchor="middle" font-size="11" fill="#475569">Secret.View</text>
+  <text x="520" y="158" font-size="12" fill="#0f172a">jsmith</text>
+  <text x="700" y="158" font-size="12" fill="#64748b">Secret a3f2b1c8...</text>
+  <text x="980" y="158" font-size="12" font-family="monospace" fill="#64748b">10.0.1.42</text>
+  <line x1="90" y1="174" x2="1190" y2="174" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 2 -->
+  <rect x="90" y="174" width="1100" height="42" fill="white"/>
+  <text x="110" y="200" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 14:30:05</text>
+  <rect x="285" y="186" width="100" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="335" y="200" text-anchor="middle" font-size="11" fill="#475569">Secret.Create</text>
+  <text x="520" y="200" font-size="12" fill="#0f172a">admin</text>
+  <text x="700" y="200" font-size="12" fill="#64748b">Secret 9d1e4f7a...</text>
+  <text x="980" y="200" font-size="12" font-family="monospace" fill="#64748b">10.0.1.1</text>
+  <line x1="90" y1="216" x2="1190" y2="216" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 3 -->
+  <rect x="90" y="216" width="1100" height="42" fill="white"/>
+  <text x="110" y="242" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 13:55:44</text>
+  <rect x="285" y="228" width="98" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="334" y="242" text-anchor="middle" font-size="11" fill="#475569">User.Login</text>
+  <text x="520" y="242" font-size="12" fill="#0f172a">mturner</text>
+  <text x="700" y="242" font-size="12" fill="#64748b">—</text>
+  <text x="980" y="242" font-size="12" font-family="monospace" fill="#64748b">192.168.3.15</text>
+  <line x1="90" y1="258" x2="1190" y2="258" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 4 -->
+  <rect x="90" y="258" width="1100" height="42" fill="white"/>
+  <text x="110" y="284" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 13:22:09</text>
+  <rect x="285" y="270" width="100" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="335" y="284" text-anchor="middle" font-size="11" fill="#475569">Secret.Delete</text>
+  <text x="520" y="284" font-size="12" fill="#0f172a">jsmith</text>
+  <text x="700" y="284" font-size="12" fill="#64748b">Secret c7a8e2d1...</text>
+  <text x="980" y="284" font-size="12" font-family="monospace" fill="#64748b">10.0.1.42</text>
+  <line x1="90" y1="300" x2="1190" y2="300" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 5 -->
+  <rect x="90" y="300" width="1100" height="42" fill="white"/>
+  <text x="110" y="326" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 11:10:33</text>
+  <rect x="285" y="312" width="96" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="333" y="326" text-anchor="middle" font-size="11" fill="#475569">User.Create</text>
+  <text x="520" y="326" font-size="12" fill="#0f172a">admin</text>
+  <text x="700" y="326" font-size="12" fill="#64748b">User 7f3b9e2c...</text>
+  <text x="980" y="326" font-size="12" font-family="monospace" fill="#64748b">10.0.1.1</text>
+  <line x1="90" y1="342" x2="1190" y2="342" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 6 -->
+  <rect x="90" y="342" width="1100" height="42" fill="white"/>
+  <text x="110" y="368" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 10:48:21</text>
+  <rect x="285" y="354" width="110" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="340" y="368" text-anchor="middle" font-size="11" fill="#475569">Secret.Update</text>
+  <text x="520" y="368" font-size="12" fill="#0f172a">cnguyen</text>
+  <text x="700" y="368" font-size="12" fill="#64748b">Secret a3f2b1c8...</text>
+  <text x="980" y="368" font-size="12" font-family="monospace" fill="#64748b">172.16.0.8</text>
+  <line x1="90" y1="384" x2="1190" y2="384" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 7 -->
+  <rect x="90" y="384" width="1100" height="42" fill="white"/>
+  <text x="110" y="410" font-size="12" font-family="monospace" fill="#64748b">2026-03-01 09:15:07</text>
+  <rect x="285" y="396" width="98" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="334" y="410" text-anchor="middle" font-size="11" fill="#475569">User.Login</text>
+  <text x="520" y="410" font-size="12" fill="#0f172a">rlopez</text>
+  <text x="700" y="410" font-size="12" fill="#64748b">—</text>
+  <text x="980" y="410" font-size="12" font-family="monospace" fill="#64748b">10.0.2.55</text>
+  <line x1="90" y1="426" x2="1190" y2="426" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 8 -->
+  <rect x="90" y="426" width="1100" height="42" fill="white"/>
+  <text x="110" y="452" font-size="12" font-family="monospace" fill="#64748b">2026-02-28 18:03:50</text>
+  <rect x="285" y="438" width="106" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="338" y="452" text-anchor="middle" font-size="11" fill="#475569">Secret.View</text>
+  <text x="520" y="452" font-size="12" fill="#0f172a">mturner</text>
+  <text x="700" y="452" font-size="12" fill="#64748b">Secret 9d1e4f7a...</text>
+  <text x="980" y="452" font-size="12" font-family="monospace" fill="#64748b">192.168.3.15</text>
+  <line x1="90" y1="468" x2="1190" y2="468" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 9 -->
+  <rect x="90" y="468" width="1100" height="42" fill="white"/>
+  <text x="110" y="494" font-size="12" font-family="monospace" fill="#64748b">2026-02-28 16:44:28</text>
+  <rect x="285" y="480" width="120" height="20" rx="4" fill="#f1f5f9"/>
+  <text x="345" y="494" text-anchor="middle" font-size="11" fill="#475569">User.Deactivate</text>
+  <text x="520" y="494" font-size="12" fill="#0f172a">admin</text>
+  <text x="700" y="494" font-size="12" fill="#64748b">User e9c0d5f6...</text>
+  <text x="980" y="494" font-size="12" font-family="monospace" fill="#64748b">10.0.1.1</text>
+  <line x1="90" y1="510" x2="1190" y2="510" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Pagination -->
+  <rect x="90" y="610" width="1100" height="1" fill="#e2e8f0"/>
+  <rect x="90" y="616" width="1100" height="36" rx="0" fill="white"/>
+  <rect x="90" y="616" width="1100" height="36" rx="8" fill="transparent"/>
+
+  <rect x="110" y="622" width="80" height="24" rx="4" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="150" y="638" text-anchor="middle" font-size="12" fill="#94a3b8">Previous</text>
+
+  <text x="640" y="638" text-anchor="middle" font-size="13" fill="#64748b">Page 1 of 5</text>
+
+  <rect x="1000" y="622" width="60" height="24" rx="4" fill="white" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="1030" y="638" text-anchor="middle" font-size="12" fill="#0f172a">Next</text>
+</svg>

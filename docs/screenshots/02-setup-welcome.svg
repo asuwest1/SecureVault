@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#f8fafc"/>
+
+  <!-- Container area -->
+  <rect x="415" y="80" width="450" height="620" rx="0" fill="transparent"/>
+
+  <!-- Shield icon background circle -->
+  <circle cx="640" cy="160" r="32" fill="#f1f5f9"/>
+  <!-- Shield icon simplified -->
+  <path d="M640 140 L624 148 L624 162 C624 172 631 181 640 184 C649 181 656 172 656 162 L656 148 Z" fill="#1e293b"/>
+  <path d="M635 163 L630 158 L632 156 L635 159 L648 146 L650 148 Z" fill="white"/>
+
+  <!-- Title -->
+  <text x="640" y="218" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">SecureVault Setup</text>
+  <text x="640" y="238" text-anchor="middle" font-size="13" fill="#64748b">First-time configuration wizard</text>
+
+  <!-- Step indicator -->
+  <!-- Step 1 (active) -->
+  <circle cx="480" cy="270" r="14" fill="#1e293b"/>
+  <text x="480" y="275" text-anchor="middle" font-size="11" font-weight="600" fill="white">1</text>
+  <!-- Line -->
+  <rect x="494" y="269" width="48" height="2" fill="#1e293b"/>
+  <!-- Step 2 -->
+  <circle cx="556" cy="270" r="14" fill="#f1f5f9"/>
+  <text x="556" y="275" text-anchor="middle" font-size="11" fill="#64748b">2</text>
+  <!-- Line -->
+  <rect x="570" y="269" width="48" height="2" fill="#e2e8f0"/>
+  <!-- Step 3 -->
+  <circle cx="632" cy="270" r="14" fill="#f1f5f9"/>
+  <text x="632" y="275" text-anchor="middle" font-size="11" fill="#64748b">3</text>
+  <!-- Line -->
+  <rect x="646" y="269" width="48" height="2" fill="#e2e8f0"/>
+  <!-- Step 4 -->
+  <circle cx="708" cy="270" r="14" fill="#f1f5f9"/>
+  <text x="708" y="275" text-anchor="middle" font-size="11" fill="#64748b">4</text>
+  <!-- Line -->
+  <rect x="722" y="269" width="48" height="2" fill="#e2e8f0"/>
+  <!-- Step 5 -->
+  <circle cx="784" cy="270" r="14" fill="#f1f5f9"/>
+  <text x="784" y="275" text-anchor="middle" font-size="11" fill="#64748b">5</text>
+
+  <!-- Step labels -->
+  <text x="480" y="296" text-anchor="middle" font-size="10" fill="#1e293b" font-weight="500">Welcome</text>
+  <text x="556" y="296" text-anchor="middle" font-size="10" fill="#94a3b8">Credentials</text>
+  <text x="632" y="296" text-anchor="middle" font-size="10" fill="#94a3b8">Key Config</text>
+  <text x="708" y="296" text-anchor="middle" font-size="10" fill="#94a3b8">Review</text>
+  <text x="784" y="296" text-anchor="middle" font-size="10" fill="#94a3b8">Done</text>
+
+  <!-- Content area -->
+  <text x="415" y="340" font-size="17" font-weight="600" fill="#0f172a">Welcome to SecureVault</text>
+  <text x="415" y="366" font-size="13" fill="#64748b">This wizard will help you configure your SecureVault instance.</text>
+  <text x="415" y="382" font-size="13" fill="#64748b">You will set up the Super Admin account and encryption key location.</text>
+
+  <!-- Warning box -->
+  <rect x="415" y="402" width="450" height="64" rx="6" fill="#fffbeb" stroke="#fcd34d" stroke-width="1"/>
+  <text x="430" y="424" font-size="13" font-weight="600" fill="#92400e">Important:</text>
+  <text x="503" y="424" font-size="13" fill="#92400e"> The encryption key file will protect all secrets.</text>
+  <text x="430" y="442" font-size="13" fill="#92400e">Store it on a separate, secure volume.</text>
+  <text x="430" y="458" font-size="12" fill="#b45309">Ensure it is backed up and kept offline.</text>
+
+  <!-- Begin Setup button -->
+  <rect x="415" y="490" width="450" height="40" rx="6" fill="#1e293b"/>
+  <text x="640" y="515" text-anchor="middle" font-size="13" font-weight="500" fill="white">Begin Setup</text>
+</svg>
