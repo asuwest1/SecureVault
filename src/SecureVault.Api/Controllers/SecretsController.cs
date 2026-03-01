@@ -20,6 +20,7 @@ namespace SecureVault.Api.Controllers;
 public class SecretsController : ControllerBase
 {
     private const int MaxVersions = 20;
+    private const int MaxPageSize = 200;
 
     private readonly AppDbContext _db;
     private readonly IEncryptionService _encryption;
@@ -62,17 +63,20 @@ public class SecretsController : ControllerBase
         if (request.FolderId.HasValue)
             query = query.Where(s => s.FolderId == request.FolderId.Value);
 
+        var page = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
+
         var total = await query.CountAsync(ct);
         var items = await query
             .OrderBy(s => s.Name)
-            .Skip((request.Page - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(s => new SecretSummaryResponse(
                 s.Id, s.Name, s.Type, s.FolderId, s.Username, s.Url, s.Tags,
                 s.CreatedAt, s.UpdatedAt))
             .ToListAsync(ct);
 
-        return Ok(new PagedResponse<SecretSummaryResponse>(items, request.Page, request.PageSize, total));
+        return Ok(new PagedResponse<SecretSummaryResponse>(items, page, pageSize, total));
     }
 
     [HttpGet("{id:guid}")]

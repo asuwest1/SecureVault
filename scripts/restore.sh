@@ -33,6 +33,11 @@ if [[ ! -f "${BACKUP_FILE}" ]]; then
     exit 1
 fi
 
+if [[ ! "${DB_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "ERROR: DB_NAME contains invalid characters. Allowed pattern: [A-Za-z_][A-Za-z0-9_]*" >&2
+    exit 1
+fi
+
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║              SecureVault Restore - WARNING                   ║"
 echo "╠══════════════════════════════════════════════════════════════╣"
@@ -108,16 +113,17 @@ echo "[$(date -u +%H:%M:%S)] MEK key file restored."
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[$(date -u +%H:%M:%S)] Restoring database..."
 
-# Drop and recreate the database
-PGPASSWORD="${PGPASSWORD:-}" psql \
-    -h "${DB_HOST}" -p "${DB_PORT}" \
-    -U "${DB_USER}" postgres \
-    -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${DB_NAME}' AND pid <> pg_backend_pid();"
+# Drop and recreate the database.
+# Use psql variable interpolation + format('%I', ...) to safely quote identifiers.
+PGPASSWORD="${PGPASSWORD:-}" psql     -v ON_ERROR_STOP=1     -v db_name="${DB_NAME}"     -h "${DB_HOST}" -p "${DB_PORT}"     -U "${DB_USER}" postgres <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = :'db_name'
+  AND pid <> pg_backend_pid();
 
-PGPASSWORD="${PGPASSWORD:-}" psql \
-    -h "${DB_HOST}" -p "${DB_PORT}" \
-    -U "${DB_USER}" postgres \
-    -c "DROP DATABASE IF EXISTS ${DB_NAME}; CREATE DATABASE ${DB_NAME} OWNER securevault_app;"
+SELECT format('DROP DATABASE IF EXISTS %I', :'db_name') \gexec
+SELECT format('CREATE DATABASE %I OWNER securevault_app', :'db_name') \gexec
+SQL
 
 PGPASSWORD="${PGPASSWORD:-}" pg_restore \
     -h "${DB_HOST}" -p "${DB_PORT}" \
