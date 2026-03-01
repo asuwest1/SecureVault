@@ -84,7 +84,7 @@ public class SecretsController : ControllerBase
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
         var secret = await _db.Secrets.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == id, ct);
+            .FirstOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
 
         if (secret == null) return NotFound();
 
@@ -108,7 +108,7 @@ public class SecretsController : ControllerBase
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         var secret = await _db.Secrets.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == id, ct);
+            .FirstOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
 
         if (secret == null) return NotFound();
 
@@ -214,7 +214,7 @@ public class SecretsController : ControllerBase
 
         var secret = await _db.Secrets
             .Include(s => s.Versions)
-            .FirstOrDefaultAsync(s => s.Id == id, ct);
+            .FirstOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
 
         if (secret == null) return NotFound();
 
@@ -293,7 +293,7 @@ public class SecretsController : ControllerBase
         var username = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        var secret = await _db.Secrets.FirstOrDefaultAsync(s => s.Id == id, ct);
+        var secret = await _db.Secrets.FirstOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
         if (secret == null) return NotFound();
 
         // Soft delete with 30-day retention before purge
@@ -316,6 +316,11 @@ public class SecretsController : ControllerBase
     [RequireSecretPermission(SecretPermission.View)]
     public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct)
     {
+        var exists = await _db.Secrets
+            .AsNoTracking()
+            .AnyAsync(s => s.Id == id && s.DeletedAt == null, ct);
+        if (!exists) return NotFound();
+
         var versions = await _db.SecretVersions
             .AsNoTracking()
             .Where(v => v.SecretId == id)

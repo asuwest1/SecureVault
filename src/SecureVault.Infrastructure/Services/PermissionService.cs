@@ -52,7 +52,7 @@ public class PermissionService : IPermissionService
         {
             var folderId = await db.Secrets
                 .AsNoTracking()
-                .Where(s => s.Id == secretId)
+                .Where(s => s.Id == secretId && s.DeletedAt == null)
                 .Select(s => s.FolderId)
                 .SingleOrDefaultAsync(cancellationToken);
 
@@ -79,7 +79,7 @@ public class PermissionService : IPermissionService
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
                 JOIN secrets s ON s.folder_id = f.id
-                WHERE s.id = {0}
+                WHERE s.id = {0} AND s.deleted_at IS NULL
                 UNION ALL
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
@@ -204,6 +204,7 @@ public class PermissionService : IPermissionService
         {
             return await db.Secrets
                 .AsNoTracking()
+                .Where(s => s.DeletedAt == null)
                 .Select(s => s.Id)
                 .ToListAsync(cancellationToken);
         }
