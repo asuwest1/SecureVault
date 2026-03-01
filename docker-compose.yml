@@ -33,6 +33,7 @@ services:
       Auth__JwtSigningKeyPath: /run/secrets/jwt-signing.pem
       Auth__Mode: "${AUTH_MODE:-local}"
       Syslog__Host: "${SYSLOG_HOST:-}"
+      Syslog__UseTls: "${SYSLOG_USE_TLS:-true}"
       AllowedHosts: "${ALLOWED_HOSTS:-localhost}"
       ASPNETCORE_ENVIRONMENT: Production
     secrets:
@@ -62,6 +63,7 @@ services:
       POSTGRES_DB: securevault
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "${DB_SUPERUSER_PASSWORD}"
+      DB_PASSWORD: "${DB_PASSWORD}"
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./scripts/db-setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
