@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#f8fafc"/>
+
+  <!-- 404 heading -->
+  <text x="640" y="330" text-anchor="middle" font-size="96" font-weight="700" fill="#cbd5e1">404</text>
+
+  <!-- Subtitle -->
+  <text x="640" y="390" text-anchor="middle" font-size="22" fill="#0f172a">Page not found</text>
+
+  <!-- Back to vault link -->
+  <text x="640" y="440" text-anchor="middle" font-size="15" fill="#2563eb" text-decoration="underline">Back to vault</text>
+</svg>

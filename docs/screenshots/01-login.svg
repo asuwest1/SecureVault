@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#f8fafc"/>
+
+  <!-- Card -->
+  <rect x="490" y="228" width="300" height="344" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="640" y="280" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">SecureVault</text>
+  <text x="640" y="300" text-anchor="middle" font-size="13" fill="#64748b">Sign in to your vault</text>
+
+  <!-- Username label -->
+  <text x="514" y="338" font-size="13" font-weight="500" fill="#0f172a">Username</text>
+  <!-- Username input -->
+  <rect x="514" y="344" width="252" height="36" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="526" y="367" font-size="13" fill="#94a3b8">johndoe</text>
+
+  <!-- Password label -->
+  <text x="514" y="404" font-size="13" font-weight="500" fill="#0f172a">Password</text>
+  <!-- Password input -->
+  <rect x="514" y="410" width="252" height="36" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="526" y="433" font-size="14" fill="#94a3b8">••••••••••••</text>
+
+  <!-- Sign In button -->
+  <rect x="514" y="464" width="252" height="38" rx="6" fill="#1e293b"/>
+  <text x="640" y="488" text-anchor="middle" font-size="13" font-weight="500" fill="white">Sign In</text>
+
+  <!-- Shadow under card -->
+  <rect x="494" y="230" width="296" height="344" rx="8" fill="none" stroke="#e2e8f0" stroke-width="0.5" opacity="0.5"/>
+</svg>

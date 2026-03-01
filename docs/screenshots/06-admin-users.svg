@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#f8fafc"/>
+
+  <!-- Back arrow + title row -->
+  <text x="140" y="68" font-size="20" fill="#94a3b8">←</text>
+  <text x="172" y="68" font-size="20" font-weight="600" fill="#0f172a">User Management</text>
+
+  <!-- New User button -->
+  <rect x="1050" y="48" width="90" height="32" rx="6" fill="#1e293b"/>
+  <line x1="1067" y1="64" x2="1079" y2="64" stroke="white" stroke-width="1.5"/>
+  <line x1="1073" y1="58" x2="1073" y2="70" stroke="white" stroke-width="1.5"/>
+  <text x="1084" y="69" font-size="13" font-weight="500" fill="white">New User</text>
+
+  <!-- Table container -->
+  <rect x="140" y="92" width="1000" height="480" rx="8" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Table header -->
+  <rect x="140" y="92" width="1000" height="44" rx="8" fill="#f8fafc"/>
+  <rect x="140" y="116" width="1000" height="20" fill="#f8fafc"/>
+  <text x="162" y="119" font-size="12" font-weight="600" fill="#64748b">USERNAME</text>
+  <text x="320" y="119" font-size="12" font-weight="600" fill="#64748b">EMAIL</text>
+  <text x="560" y="119" font-size="12" font-weight="600" fill="#64748b">STATUS</text>
+  <text x="680" y="119" font-size="12" font-weight="600" fill="#64748b">ROLES</text>
+  <text x="780" y="119" font-size="12" font-weight="600" fill="#64748b">AUTH</text>
+
+  <!-- Divider -->
+  <line x1="140" y1="136" x2="1140" y2="136" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 1: admin (super admin) -->
+  <rect x="140" y="136" width="1000" height="52" fill="white"/>
+  <text x="162" y="167" font-size="13" font-weight="500" fill="#0f172a">admin</text>
+  <rect x="212" y="156" width="38" height="18" rx="3" fill="#fef3c7"/>
+  <text x="231" y="169" text-anchor="middle" font-size="10" fill="#92400e">admin</text>
+  <text x="320" y="167" font-size="13" fill="#64748b">admin@company.internal</text>
+  <rect x="560" y="153" width="52" height="20" rx="10" fill="#dcfce7"/>
+  <text x="586" y="167" text-anchor="middle" font-size="11" fill="#166534">Active</text>
+  <text x="680" y="167" font-size="13" fill="#64748b">0 roles</text>
+  <text x="780" y="167" font-size="13" fill="#64748b">Local</text>
+  <line x1="140" y1="188" x2="1140" y2="188" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 2: jsmith -->
+  <rect x="140" y="188" width="1000" height="52" fill="white"/>
+  <text x="162" y="219" font-size="13" font-weight="500" fill="#0f172a">jsmith</text>
+  <text x="320" y="219" font-size="13" fill="#64748b">j.smith@company.internal</text>
+  <rect x="560" y="205" width="52" height="20" rx="10" fill="#dcfce7"/>
+  <text x="586" y="219" text-anchor="middle" font-size="11" fill="#166534">Active</text>
+  <text x="680" y="219" font-size="13" fill="#64748b">2 roles</text>
+  <text x="780" y="219" font-size="13" fill="#64748b">LDAP + MFA</text>
+  <!-- Deactivate icon -->
+  <rect x="1090" y="205" width="28" height="28" rx="4" fill="transparent"/>
+  <circle cx="1098" cy="215" r="5" fill="none" stroke="#94a3b8" stroke-width="1.3"/>
+  <line x1="1104" y1="221" x2="1110" y2="227" stroke="#94a3b8" stroke-width="1.3"/>
+  <line x1="1092" y1="209" x2="1110" y2="227" stroke="#ef4444" stroke-width="1.3"/>
+  <line x1="140" y1="240" x2="1140" y2="240" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 3: mturner -->
+  <rect x="140" y="240" width="1000" height="52" fill="white"/>
+  <text x="162" y="271" font-size="13" font-weight="500" fill="#0f172a">mturner</text>
+  <text x="320" y="271" font-size="13" fill="#64748b">m.turner@company.internal</text>
+  <rect x="560" y="257" width="52" height="20" rx="10" fill="#dcfce7"/>
+  <text x="586" y="271" text-anchor="middle" font-size="11" fill="#166534">Active</text>
+  <text x="680" y="271" font-size="13" fill="#64748b">1 role</text>
+  <text x="780" y="271" font-size="13" fill="#64748b">Local + MFA</text>
+  <line x1="140" y1="292" x2="1140" y2="292" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 4: bwilson (inactive) -->
+  <rect x="140" y="292" width="1000" height="52" fill="white"/>
+  <text x="162" y="323" font-size="13" font-weight="500" fill="#0f172a">bwilson</text>
+  <text x="320" y="323" font-size="13" fill="#64748b">b.wilson@company.internal</text>
+  <rect x="560" y="309" width="60" height="20" rx="10" fill="#fee2e2"/>
+  <text x="590" y="323" text-anchor="middle" font-size="11" fill="#991b1b">Inactive</text>
+  <text x="680" y="323" font-size="13" fill="#64748b">1 role</text>
+  <text x="780" y="323" font-size="13" fill="#64748b">Local</text>
+  <!-- Activate icon (user-check) -->
+  <circle cx="1098" cy="311" r="5" fill="none" stroke="#94a3b8" stroke-width="1.3"/>
+  <line x1="1104" y1="317" x2="1110" y2="323" stroke="#94a3b8" stroke-width="1.3"/>
+  <polyline points="1092,322 1096,326 1104,318" fill="none" stroke="#22c55e" stroke-width="1.3"/>
+  <line x1="140" y1="344" x2="1140" y2="344" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 5: cnguyen -->
+  <rect x="140" y="344" width="1000" height="52" fill="white"/>
+  <text x="162" y="375" font-size="13" font-weight="500" fill="#0f172a">cnguyen</text>
+  <text x="320" y="375" font-size="13" fill="#64748b">c.nguyen@company.internal</text>
+  <rect x="560" y="361" width="52" height="20" rx="10" fill="#dcfce7"/>
+  <text x="586" y="375" text-anchor="middle" font-size="11" fill="#166534">Active</text>
+  <text x="680" y="375" font-size="13" fill="#64748b">2 roles</text>
+  <text x="780" y="375" font-size="13" fill="#64748b">LDAP</text>
+  <line x1="140" y1="396" x2="1140" y2="396" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Row 6: rlopez -->
+  <rect x="140" y="396" width="1000" height="52" fill="white"/>
+  <text x="162" y="427" font-size="13" font-weight="500" fill="#0f172a">rlopez</text>
+  <text x="320" y="427" font-size="13" fill="#64748b">r.lopez@company.internal</text>
+  <rect x="560" y="413" width="52" height="20" rx="10" fill="#dcfce7"/>
+  <text x="586" y="427" text-anchor="middle" font-size="11" fill="#166534">Active</text>
+  <text x="680" y="427" font-size="13" fill="#64748b">1 role</text>
+  <text x="780" y="427" font-size="13" fill="#64748b">Local</text>
+  <line x1="140" y1="448" x2="1140" y2="448" stroke="#e2e8f0" stroke-width="1"/>
+</svg>
