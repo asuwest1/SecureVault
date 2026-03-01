@@ -85,14 +85,18 @@ public class AuthController : ControllerBase
         if (user.IsLdapUser)
         {
             var ldap = HttpContext.RequestServices.GetService<ILdapService>();
-            if (ldap != null)
+            if (ldap == null)
             {
-                var ldapResult = await ldap.AuthenticateAsync(request.Username, request.Password, ct);
-                if (ldapResult == null)
-                {
-                    await HandleFailedAttemptAsync(user, ip, ct);
-                    return Unauthorized(new { error = failureMessage });
-                }
+                // LDAP service is not configured — deny rather than bypass authentication
+                await _audit.LogAsync(AuditAction.AuthLoginFailed, user.Id, user.Username, ipAddress: ip);
+                return Unauthorized(new { error = failureMessage });
+            }
+
+            var ldapResult = await ldap.AuthenticateAsync(request.Username, request.Password, ct);
+            if (ldapResult == null)
+            {
+                await HandleFailedAttemptAsync(user, ip, ct);
+                return Unauthorized(new { error = failureMessage });
             }
         }
         else
