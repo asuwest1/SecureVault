@@ -30,6 +30,6 @@ public record SearchSecretsRequest(
     SecretType? Type = null,
     string[]? Tags = null,
     Guid? FolderId = null,
-    int Page = 1,
-    int PageSize = 50
+    [Range(1, int.MaxValue)] int Page = 1,
+    [Range(1, 200)] int PageSize = 50
 );
