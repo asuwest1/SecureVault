@@ -157,7 +157,7 @@ public class AuthFlowTests : IAsyncLifetime
     {
         // Setup + login
         var initResponse = await InitializeTestUserAsync();
-        initResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Gone,
+        initResponse.StatusCode.Should().BeOneOf(new[] { HttpStatusCode.OK, HttpStatusCode.Gone },
             because: "setup may already be completed when tests are executed against a reused environment");
 
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new

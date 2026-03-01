@@ -277,7 +277,7 @@ public class SecurityTests : IAsyncLifetime
             AdminPassword = "SecAdmin123!"
         });
 
-        setupResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Gone,
+        setupResponse.StatusCode.Should().BeOneOf(new[] { HttpStatusCode.OK, HttpStatusCode.Gone },
             because: "setup should be idempotent when integration environments are reused");
 
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
