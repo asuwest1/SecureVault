@@ -254,15 +254,17 @@ public class SecretsController : ControllerBase
         if (request.Value != null)
         {
             var dek = _encryption.GenerateDek();
+            var plaintextBytes = Encoding.UTF8.GetBytes(request.Value);
             try
             {
-                var (valueEncWithTag, nonce) = _encryption.Encrypt(Encoding.UTF8.GetBytes(request.Value), dek);
+                var (valueEncWithTag, nonce) = _encryption.Encrypt(plaintextBytes, dek);
                 secret.ValueEnc = valueEncWithTag;
                 secret.Nonce = nonce;
                 secret.DekEnc = _encryption.WrapDek(dek);
             }
             finally
             {
+                CryptographicOperations.ZeroMemory(plaintextBytes);
                 CryptographicOperations.ZeroMemory(dek);
             }
         }

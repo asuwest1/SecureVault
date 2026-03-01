@@ -60,8 +60,10 @@ public class AuthController : ControllerBase
 
         if (user == null)
         {
-            // Perform a dummy password verification to maintain constant time
-            _encryption.VerifyPassword(request.Password, "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+            // Perform a dummy password verification to maintain constant time.
+            // Salt must be 22 base64 chars (= 16 bytes); hash must be 43 base64 chars (= 32 bytes)
+            // so the PHC string is syntactically valid and Argon2 runs the full computation.
+            _encryption.VerifyPassword(request.Password, "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
             return Unauthorized(new { error = failureMessage });
         }
 
@@ -87,8 +89,8 @@ public class AuthController : ControllerBase
             var ldap = HttpContext.RequestServices.GetService<ILdapService>();
             if (ldap == null)
             {
-                // LDAP service is not configured — deny rather than bypass authentication
-                await _audit.LogAsync(AuditAction.AuthLoginFailed, user.Id, user.Username, ipAddress: ip);
+                // LDAP service is not configured — deny and count toward lockout
+                await HandleFailedAttemptAsync(user, ip, ct);
                 return Unauthorized(new { error = failureMessage });
             }
 
