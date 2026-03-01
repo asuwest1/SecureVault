@@ -57,8 +57,9 @@ echo ""
 HMAC_FILE="${BACKUP_FILE}.hmac"
 if [[ -f "${HMAC_FILE}" ]]; then
     echo "[$(date -u +%H:%M:%S)] Verifying backup HMAC..."
-    EXPECTED_HMAC=$(cat "${HMAC_FILE}")
-    ACTUAL_HMAC=$(openssl dgst -sha256 -hmac "$(cat "${PASSPHRASE_FILE}")" "${BACKUP_FILE}")
+    EXPECTED_HMAC=$(tr -d '[:space:]' < "${HMAC_FILE}")
+    ACTUAL_HMAC=$(openssl dgst -sha256 -mac HMAC -macopt "key:file:${PASSPHRASE_FILE}" \
+        -binary "${BACKUP_FILE}" | xxd -p -c 256)
     if [[ "${EXPECTED_HMAC}" != "${ACTUAL_HMAC}" ]]; then
         echo "ERROR: Backup HMAC verification FAILED. Backup may have been tampered with." >&2
         exit 1
