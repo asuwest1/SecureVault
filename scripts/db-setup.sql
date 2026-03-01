@@ -1,14 +1,30 @@
 -- SecureVault Database Setup
 -- Run as PostgreSQL superuser (postgres) — NOT as securevault_app
 -- This script sets up roles, permissions, and append-only audit log constraint.
+--
+-- Requires: DB_PASSWORD environment variable set in the postgres container
+-- (docker-compose passes it via the db service's environment section).
 
--- Create application role (if not exists)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'securevault_app') THEN
-        CREATE ROLE securevault_app WITH LOGIN PASSWORD 'CHANGEME_IN_ENV';
-    END IF;
-END $$;
+-- Read the application role password from the container environment.
+-- \getenv requires psql 15+ (PostgreSQL 16 ships psql 16, so this is safe).
+\getenv securevault_db_password DB_PASSWORD
+
+\if :{?securevault_db_password}
+\else
+    \warn 'ERROR: DB_PASSWORD environment variable is not set. Cannot create securevault_app role with a secure password.'
+    \quit 1
+\endif
+
+-- Create application role (idempotent).
+-- format() with %L safely quotes the password as a SQL string literal,
+-- preventing injection if the password contains special characters.
+SELECT format(
+    'CREATE ROLE securevault_app WITH LOGIN PASSWORD %L',
+    :'securevault_db_password'
+)
+WHERE NOT EXISTS (
+    SELECT FROM pg_catalog.pg_roles WHERE rolname = 'securevault_app'
+) \gexec
 
 -- Grant required permissions to application role
 GRANT CONNECT ON DATABASE securevault TO securevault_app;

@@ -57,7 +57,7 @@ public class AuditService : IAuditService
             await db.SaveChangesAsync(cancellationToken);
 
             // Fire-and-forget syslog — unavailability must not block request
-            _ = _syslog.ForwardAsync(entry);
+            _syslog.Forward(entry);
         }
         catch (Exception ex)
         {
