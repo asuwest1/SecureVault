@@ -33,6 +33,7 @@ services:
       Auth__JwtSigningKeyPath: /run/secrets/jwt-signing.pem
       Auth__Mode: "${AUTH_MODE:-local}"
       Syslog__Host: "${SYSLOG_HOST:-}"
+      AllowedHosts: "${ALLOWED_HOSTS:-localhost}"
       ASPNETCORE_ENVIRONMENT: Production
     secrets:
       - securevault-mek

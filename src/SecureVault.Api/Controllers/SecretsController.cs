@@ -45,7 +45,7 @@ public class SecretsController : ControllerBase
         var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        IQueryable<Secret> query = _db.Secrets.AsNoTracking();
+        IQueryable<Secret> query = _db.Secrets.AsNoTracking().Where(s => s.DeletedAt == null);
 
         if (!isSuperAdmin)
         {
