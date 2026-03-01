@@ -55,20 +55,20 @@ echo ""
 # HMAC verification MUST happen before decryption to prevent oracle attacks.
 # ─────────────────────────────────────────────────────────────────────────────
 HMAC_FILE="${BACKUP_FILE}.hmac"
-if [[ -f "${HMAC_FILE}" ]]; then
-    echo "[$(date -u +%H:%M:%S)] Verifying backup HMAC..."
-    EXPECTED_HMAC=$(tr -d '[:space:]' < "${HMAC_FILE}")
-    ACTUAL_HMAC=$(openssl dgst -sha256 -mac HMAC -macopt "key:file:${PASSPHRASE_FILE}" \
-        -binary "${BACKUP_FILE}" | xxd -p -c 256)
-    if [[ "${EXPECTED_HMAC}" != "${ACTUAL_HMAC}" ]]; then
-        echo "ERROR: Backup HMAC verification FAILED. Backup may have been tampered with." >&2
-        exit 1
-    fi
-    echo "[$(date -u +%H:%M:%S)] HMAC verification passed."
-else
-    echo "WARNING: No HMAC file found at ${HMAC_FILE}. Backup authenticity cannot be verified." >&2
-    echo "         This backup may have been created with an older version." >&2
+if [[ ! -f "${HMAC_FILE}" ]]; then
+    echo "ERROR: No HMAC file found at ${HMAC_FILE}. Refusing unauthenticated restore." >&2
+    exit 1
 fi
+
+echo "[$(date -u +%H:%M:%S)] Verifying backup HMAC..."
+EXPECTED_HMAC=$(tr -d '[:space:]' < "${HMAC_FILE}")
+ACTUAL_HMAC=$(openssl dgst -sha256 -mac HMAC -macopt "key:file:${PASSPHRASE_FILE}" \
+    -binary "${BACKUP_FILE}" | xxd -p -c 256)
+if [[ "${EXPECTED_HMAC}" != "${ACTUAL_HMAC}" ]]; then
+    echo "ERROR: Backup HMAC verification FAILED. Backup may have been tampered with." >&2
+    exit 1
+fi
+echo "[$(date -u +%H:%M:%S)] HMAC verification passed."
 
 echo "[$(date -u +%H:%M:%S)] Decrypting backup..."
 openssl enc -d -aes-256-ctr \
