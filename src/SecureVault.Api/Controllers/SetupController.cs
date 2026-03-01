@@ -13,10 +13,12 @@ namespace SecureVault.Api.Controllers;
 public class SetupController : ControllerBase
 {
     private readonly FirstRunService _firstRun;
+    private readonly ILogger<SetupController> _logger;
 
-    public SetupController(FirstRunService firstRun)
+    public SetupController(FirstRunService firstRun, ILogger<SetupController> logger)
     {
         _firstRun = firstRun;
+        _logger = logger;
     }
 
     [HttpGet("status")]
@@ -43,6 +45,15 @@ public class SetupController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(503, new { error = "Setup request was cancelled. Please retry." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error during system initialization");
+            return StatusCode(500, new { error = "System initialization failed due to an internal error." });
         }
     }
 }

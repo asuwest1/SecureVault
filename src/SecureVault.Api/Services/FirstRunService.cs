@@ -9,11 +9,13 @@ namespace SecureVault.Api.Services;
 
 /// <summary>
 /// Handles first-run system initialization: MEK generation, RSA key pair, Super Admin, root folder.
-/// Uses a DB row lock (FOR UPDATE) to prevent race conditions on concurrent calls.
+/// Uses a per-instance semaphore (not static) — FirstRunService is scoped so each request gets
+/// its own lock that is acquired immediately without blocking. Cross-request idempotency is
+/// enforced by the database double-check inside InitializeAsync.
 /// </summary>
 public class FirstRunService
 {
-    private static readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly SemaphoreSlim _lock = new(1, 1);
 
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
     private readonly IEncryptionService _encryption;
