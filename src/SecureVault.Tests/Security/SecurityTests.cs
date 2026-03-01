@@ -200,6 +200,55 @@ public class SecurityTests : IAsyncLifetime
         }
     }
 
+
+    /// <summary>
+    /// Soft-deleted secrets must not remain readable or updatable before purge.
+    /// </summary>
+    [Fact]
+    public async Task SoftDeletedSecret_IsNotAccessible_ForReadOrUpdate()
+    {
+        var token = await SetupAndLoginAsync();
+        Client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var folderResponse = await Client.PostAsJsonAsync("/api/v1/folders", new
+        {
+            Name = "SoftDelete Test Folder"
+        });
+        folderResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var folder = await folderResponse.Content.ReadFromJsonAsync<FolderResult>();
+        folder.Should().NotBeNull();
+
+        var createSecretResponse = await Client.PostAsJsonAsync("/api/v1/secrets", new
+        {
+            Name = "SoftDelete Secret",
+            Value = "DeletedSecretValue!",
+            Type = 1,
+            FolderId = folder!.Id
+        });
+        createSecretResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var secret = await createSecretResponse.Content.ReadFromJsonAsync<SecretResult>();
+        secret.Should().NotBeNull();
+
+        var deleteResponse = await Client.DeleteAsync($"/api/v1/secrets/{secret!.Id}");
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var getResponse = await Client.GetAsync($"/api/v1/secrets/{secret.Id}");
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var valueResponse = await Client.GetAsync($"/api/v1/secrets/{secret.Id}/value");
+        valueResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var updateResponse = await Client.PutAsJsonAsync($"/api/v1/secrets/{secret.Id}", new
+        {
+            Notes = "attempted update after delete"
+        });
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var versionsResponse = await Client.GetAsync($"/api/v1/secrets/{secret.Id}/versions");
+        versionsResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     /// <summary>
     /// Setup endpoint is disabled after initialization (returns 410 Gone).
     /// </summary>
