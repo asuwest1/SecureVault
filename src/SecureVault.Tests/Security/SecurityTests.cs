@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -7,8 +8,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Testcontainers.PostgreSql;
+using SecureVault.Core.Interfaces;
 using SecureVault.Infrastructure.Data;
+using SecureVault.Infrastructure.Services;
 using Xunit;
 
 namespace SecureVault.Tests.Security;
@@ -68,9 +73,37 @@ public class SecurityTests : IAsyncLifetime
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
                     services.AddDbContextFactory<AppDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString()));
+                        options.UseNpgsql(_postgres.GetConnectionString())
+                               .UseSnakeCaseNamingConvention());
                     services.AddScoped(sp =>
                         sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
+
+                    // Override singletons that read key files from configuration.
+                    // ConfigureAppConfiguration ordering can be unreliable in
+                    // WebApplicationFactory; resolve the correct paths explicitly.
+                    var mekPath = _mekFilePath;
+                    var jwtPath = _jwtKeyPath;
+
+                    services.RemoveAll<IEncryptionService>();
+                    services.AddSingleton<IEncryptionService>(sp =>
+                    {
+                        var logger = sp.GetRequiredService<ILogger<EncryptionService>>();
+                        var cfg = new ConfigurationBuilder()
+                            .AddInMemoryCollection(new Dictionary<string, string?>
+                            {
+                                ["Encryption:KeyFilePath"] = mekPath,
+                            })
+                            .Build();
+                        return new EncryptionService(cfg, logger);
+                    });
+
+                    services.RemoveAll<RsaSecurityKey>();
+                    services.AddSingleton(_ =>
+                    {
+                        var rsa = RSA.Create();
+                        rsa.ImportFromPem(File.ReadAllText(jwtPath));
+                        return new RsaSecurityKey(rsa);
+                    });
                 });
             });
 
