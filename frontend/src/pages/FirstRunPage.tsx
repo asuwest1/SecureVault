@@ -15,7 +15,6 @@ const initSchema = z.object({
     .regex(/[0-9]/, 'Must contain digit')
     .regex(/[^A-Za-z0-9]/, 'Must contain special character'),
   confirmPassword: z.string(),
-  keyFilePath: z.string().min(1, 'Key file path required'),
 }).refine((d) => d.adminPassword === d.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
@@ -23,7 +22,7 @@ const initSchema = z.object({
 
 type InitForm = z.infer<typeof initSchema>
 
-const STEPS = ['Welcome', 'Credentials', 'Key Config', 'Review', 'Done']
+const STEPS = ['Welcome', 'Credentials', 'Review', 'Done']
 
 export function FirstRunPage() {
   const [step, setStep] = useState(0)
@@ -33,9 +32,6 @@ export function FirstRunPage() {
 
   const form = useForm<InitForm>({
     resolver: zodResolver(initSchema),
-    defaultValues: {
-      keyFilePath: '/run/secrets/securevault-mek',
-    }
   })
 
   const onSubmit = async (data: InitForm) => {
@@ -49,7 +45,6 @@ export function FirstRunPage() {
           adminUsername: data.adminUsername,
           adminEmail: data.adminEmail,
           adminPassword: data.adminPassword,
-          keyFilePath: data.keyFilePath,
         }),
       })
 
@@ -58,7 +53,7 @@ export function FirstRunPage() {
         throw new Error(err.error ?? 'Initialization failed')
       }
 
-      setStep(4)  // Success step
+      setStep(3)  // Success step
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Initialization failed')
     } finally {
@@ -102,12 +97,13 @@ export function FirstRunPage() {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">Welcome to SecureVault</h2>
             <p className="text-sm text-muted-foreground">
-              This wizard will help you configure your SecureVault instance.
-              You will set up the Super Admin account and encryption key location.
+              This wizard creates the initial Super Admin account.
             </p>
             <div className="p-4 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
-              <strong>Important:</strong> The encryption key file will protect all secrets.
-              Store it on a separate, secure volume.
+              <strong>Prerequisite:</strong> The Master Encryption Key and JWT
+              signing key must already be provisioned by your operator (see
+              the installation guide). They are loaded by the application at
+              startup and are not configured here.
             </div>
             <button
               onClick={() => setStep(1)}
@@ -174,36 +170,6 @@ export function FirstRunPage() {
 
         {step === 2 && (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Encryption Key Configuration</h2>
-            <p className="text-sm text-muted-foreground">
-              The Master Encryption Key (MEK) file protects all stored secrets.
-              This path must be accessible to the SecureVault process and should
-              point to a Docker volume or secure mount.
-            </p>
-            <div>
-              <label className="block text-sm font-medium mb-1">Key File Path</label>
-              <input type="text"
-                     className="w-full px-3 py-2 border border-input rounded text-sm font-mono"
-                     {...form.register('keyFilePath')} />
-              <p className="text-xs text-muted-foreground mt-1">
-                Default: /run/secrets/securevault-mek (Docker secrets)
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setStep(1)}
-                      className="flex-1 py-2 border border-border rounded text-sm hover:bg-accent">
-                Back
-              </button>
-              <button onClick={() => setStep(3)}
-                      className="flex-1 py-2 bg-primary text-primary-foreground rounded text-sm hover:bg-primary/90">
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-4">
             <h2 className="text-lg font-semibold">Review Configuration</h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -214,13 +180,9 @@ export function FirstRunPage() {
                 <dt className="text-muted-foreground">Admin Email</dt>
                 <dd className="font-medium">{form.getValues('adminEmail')}</dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Key File Path</dt>
-                <dd className="font-mono text-xs">{form.getValues('keyFilePath')}</dd>
-              </div>
             </dl>
             <div className="flex gap-3">
-              <button onClick={() => setStep(2)}
+              <button onClick={() => setStep(1)}
                       className="flex-1 py-2 border border-border rounded text-sm hover:bg-accent">
                 Back
               </button>
@@ -236,7 +198,7 @@ export function FirstRunPage() {
           </div>
         )}
 
-        {step === 4 && (
+        {step === 3 && (
           <div className="text-center space-y-4">
             <CheckCircle size={48} className="mx-auto text-green-500" />
             <h2 className="text-lg font-semibold">Setup Complete</h2>

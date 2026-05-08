@@ -128,10 +128,22 @@ DATABASE_URL=Host=db;Database=securevault;Username=securevault_app;Password=<str
 
 ### Paths (inside the container)
 
+The container reads the MEK from `SECUREVAULT_KEY_FILE` and the JWT
+signing key from the `Auth__JwtSigningKeyPath` configuration entry. Both
+default to the Docker secret mount points and should not need to be
+overridden:
+
 ```env
-# Path where the Master Encryption Key file is mounted (do not change unless customizing docker-compose.yml)
-MEK_KEY_FILE=/run/secrets/mek_key
-JWT_SIGNING_KEY_FILE=/run/secrets/jwt_key
+# Set in docker-compose.yml — shown for reference only
+SECUREVAULT_KEY_FILE=/run/secrets/securevault-mek
+Auth__JwtSigningKeyPath=/run/secrets/jwt-signing.pem
+```
+
+The host paths supplying those secrets are controlled by:
+
+```env
+MEK_FILE_PATH=./secrets/securevault-mek
+JWT_KEY_PATH=./secrets/jwt-signing.pem
 ```
 
 ### Application Settings
@@ -155,19 +167,32 @@ SYSLOG_PORT=514
 
 ## 5. Generate Secrets
 
-SecureVault uses Docker Secrets for the Master Encryption Key (MEK) and JWT signing key. These are mounted read-only inside the container and never written to the database.
+SecureVault uses Docker Secrets for the Master Encryption Key (MEK) and
+JWT signing key. Both files are mounted read-only inside the container
+and are loaded by the application at startup, so they MUST exist before
+you run `docker compose up`.
 
 ```bash
-# Generate a 32-byte (256-bit) MEK
-openssl rand -base64 32 > data/mek/mek.key
-chmod 600 data/mek/mek.key
+mkdir -p secrets
 
-# Generate a 64-byte JWT signing key
-openssl rand -base64 64 > data/mek/jwt.key
-chmod 600 data/mek/jwt.key
+# 32 raw bytes of CSPRNG output — required exact size for AES-256-GCM.
+# Do NOT use base64 here; the runtime expects exactly 32 binary bytes.
+openssl rand -out secrets/securevault-mek 32
+chmod 600 secrets/securevault-mek
+
+# 2048-bit RSA private key in PEM form for JWT (RS256) signing.
+# A random byte string will not work — the application imports this
+# file as an RSA private key.
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+    -out secrets/jwt-signing.pem
+chmod 600 secrets/jwt-signing.pem
 ```
 
-> **Important:** Back up `data/mek/mek.key` immediately after generation. Losing this file makes all encrypted secrets unrecoverable.
+> **Important:** Back up `secrets/securevault-mek` immediately after
+> generation. Losing this file makes all encrypted secrets unrecoverable.
+
+> **Note:** If you mount the secrets at non-default host paths, set
+> `MEK_FILE_PATH` and `JWT_KEY_PATH` in your `.env` to match.
 
 ---
 
@@ -226,7 +251,10 @@ docker compose exec db psql -U postgres -d securevault -f /docker-entrypoint-ini
 
 ## 8. First-Run Initialization
 
-Before the vault can be used it must be initialized. This creates the super-admin account and generates the MEK on disk.
+Before the vault can be used it must be initialized. This creates the
+super-admin account and the root folder. The MEK and JWT signing key
+must already be present (see "Generate Secrets" above) — the setup
+endpoint does NOT generate them.
 
 The setup endpoint is only available before initialization. It returns `410 Gone` once completed.
 
@@ -236,9 +264,9 @@ The setup endpoint is only available before initialization. It returns `410 Gone
 curl -k -X POST https://vault.example.com/api/v1/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "admin",
-    "password": "ChangeMe!Securely123",
-    "email": "admin@example.com"
+    "adminUsername": "admin",
+    "adminEmail": "admin@example.com",
+    "adminPassword": "ChangeMe!Securely123"
   }'
 ```
 
@@ -309,7 +337,7 @@ export BACKUP_PASSPHRASE="<strong-passphrase>"
 export RETENTION_DAYS=30    # How many days to keep old backups
 export DB_NAME=securevault
 export DB_USER=securevault_app
-export MEK_KEY_FILE=/path/to/mek.key
+export MEK_KEY_FILE=/path/to/securevault-mek
 
 # Run backup
 bash scripts/backup.sh
@@ -448,4 +476,4 @@ docker image rm securevault:latest
 rm -rf data/
 ```
 
-> **Warning:** Removing `data/mek/mek.key` before creating a backup makes all encrypted secrets permanently unrecoverable.
+> **Warning:** Removing `secrets/securevault-mek` before creating a backup makes all encrypted secrets permanently unrecoverable.
