@@ -21,6 +21,26 @@ services:
       - internal
 
   # ─────────────────────────────────────────────────────────────────────────
+  # Audit-log permissions — runs once after migrations to enforce the
+  # append-only invariant. The REVOKE in db-setup.sql cannot run during
+  # initial DB init because the audit_log table does not exist until
+  # EF migrations have created it; this service applies it as a
+  # post-migration step using the postgres superuser credentials.
+  # ─────────────────────────────────────────────────────────────────────────
+  audit-perms:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: "${DB_SUPERUSER_PASSWORD}"
+    entrypoint: >
+      sh -c "psql -h db -U postgres -d securevault -v ON_ERROR_STOP=1
+             -c \"REVOKE DELETE, UPDATE ON audit_log FROM securevault_app;\""
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    networks:
+      - internal
+
+  # ─────────────────────────────────────────────────────────────────────────
   # Application
   # ─────────────────────────────────────────────────────────────────────────
   app:
@@ -41,6 +61,8 @@ services:
       - jwt-signing.pem
     depends_on:
       migrator:
+        condition: service_completed_successfully
+      audit-perms:
         condition: service_completed_successfully
       db:
         condition: service_healthy
