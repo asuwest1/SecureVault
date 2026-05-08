@@ -75,8 +75,14 @@ jobs:
 
       - name: Check coverage threshold (≥15%)
         run: |
+          set -euo pipefail
           # Extract line coverage from coverage report
           COVERAGE=$(grep -oP 'line-rate="\K[^"]+' coverage/**/coverage.cobertura.xml | head -1)
+          if [[ -z "$COVERAGE" ]]; then
+            echo "Could not extract line coverage from coverage report — failing CI."
+            ls -R coverage || true
+            exit 1
+          fi
           THRESHOLD="0.15"
           if awk "BEGIN {exit !($COVERAGE < $THRESHOLD)}"; then
             echo "Coverage ${COVERAGE} is below threshold ${THRESHOLD}"
@@ -101,7 +107,6 @@ jobs:
     name: Integration & Security Tests
     runs-on: ubuntu-latest
     needs: [dotnet-build]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

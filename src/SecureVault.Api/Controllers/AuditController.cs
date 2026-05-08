@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +10,7 @@ namespace SecureVault.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/audit")]
-[Authorize]
+[Authorize(Policy = "SuperAdmin")]
 public class AuditController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -31,8 +30,6 @@ public class AuditController : ControllerBase
         [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
-        RequireSuperAdmin();
-
         var query = _db.AuditLogs.AsNoTracking();
 
         if (actorUserId.HasValue) query = query.Where(a => a.ActorUserId == actorUserId);
@@ -62,8 +59,6 @@ public class AuditController : ControllerBase
         [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
-        RequireSuperAdmin();
-
         Response.ContentType = "text/csv";
         Response.Headers.ContentDisposition = "attachment; filename=audit-log.csv";
 
@@ -90,11 +85,5 @@ public class AuditController : ControllerBase
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
             return $"\"{value.Replace("\"", "\"\"")}\"";
         return value;
-    }
-
-    private void RequireSuperAdmin()
-    {
-        if (!bool.Parse(User.FindFirstValue("is_super_admin") ?? "false"))
-            throw new UnauthorizedAccessException("Super admin required.");
     }
 }

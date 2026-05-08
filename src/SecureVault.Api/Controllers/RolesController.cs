@@ -53,10 +53,9 @@ public class RolesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Create([FromBody] CreateRoleRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var role = new Role
@@ -78,10 +77,9 @@ public class RolesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateRoleRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var role = await _db.Roles.FindAsync([id], ct);
         if (role == null) return NotFound();
 
@@ -98,10 +96,9 @@ public class RolesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var role = await _db.Roles.FindAsync([id], ct);
         if (role == null) return NotFound();
 
@@ -117,11 +114,10 @@ public class RolesController : ControllerBase
     }
 
     [HttpPut("{id:guid}/secret-acl")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> SetSecretAcl(
         Guid id, [FromBody] SetSecretAclRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         // Verify the secret exists
         if (!await _db.Secrets.AnyAsync(s => s.Id == request.SecretId, ct))
             return NotFound();
@@ -147,11 +143,5 @@ public class RolesController : ControllerBase
 
         await _db.SaveChangesAsync(ct);
         return NoContent();
-    }
-
-    private void RequireSuperAdmin()
-    {
-        if (!bool.Parse(User.FindFirstValue("is_super_admin") ?? "false"))
-            throw new UnauthorizedAccessException("Super admin required.");
     }
 }
