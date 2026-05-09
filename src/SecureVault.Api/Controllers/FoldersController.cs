@@ -166,10 +166,9 @@ public class FoldersController : ControllerBase
     }
 
     [HttpPut("{id:guid}/acl")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> SetAcl(Guid id, [FromBody] SetFolderAclRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var existing = await _db.FolderAcls
             .FirstOrDefaultAsync(fa => fa.FolderId == id && fa.RoleId == request.RoleId, ct);
 
@@ -217,12 +216,5 @@ public class FoldersController : ControllerBase
         var roleIds = User.FindAll("role_ids").Select(c => Guid.Parse(c.Value)).ToList();
         var isSuperAdmin = bool.Parse(User.FindFirstValue("is_super_admin") ?? "false");
         return (userId, roleIds, isSuperAdmin);
-    }
-
-    private bool RequireSuperAdmin()
-    {
-        var isSuperAdmin = bool.Parse(User.FindFirstValue("is_super_admin") ?? "false");
-        if (!isSuperAdmin) throw new UnauthorizedAccessException("Super admin required.");
-        return true;
     }
 }

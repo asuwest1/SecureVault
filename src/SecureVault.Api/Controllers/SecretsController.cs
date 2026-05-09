@@ -208,7 +208,7 @@ public class SecretsController : ControllerBase
     [RequireSecretPermission(SecretPermission.Change)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSecretRequest request, CancellationToken ct)
     {
-        var (userId, _, _) = GetCallerInfo();
+        var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
         var username = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
@@ -217,6 +217,22 @@ public class SecretsController : ControllerBase
             .FirstOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
 
         if (secret == null) return NotFound();
+
+        // If the caller is moving the secret to a different folder, verify the
+        // destination exists and the caller has Add permission there. Without
+        // this check, a user with Change on a secret could relocate it into a
+        // folder they otherwise have no write access to, or into a non-existent
+        // folder id (which would surface as a DB FK violation).
+        if (request.FolderId.HasValue && request.FolderId.Value != secret.FolderId)
+        {
+            var destination = await _db.Folders.FindAsync([request.FolderId.Value], ct);
+            if (destination == null) return NotFound();
+
+            var destPerm = await _permissions.GetFolderPermissionAsync(
+                userId, roleIds, isSuperAdmin, request.FolderId.Value, ct);
+            if (destPerm == null || !destPerm.Value.HasFlag(SecretPermission.Add))
+                return NotFound();  // 404, not 403 — prevents folder existence disclosure
+        }
 
         // Version management: save current version before overwrite
         var currentVersionNum = secret.Versions.Any()

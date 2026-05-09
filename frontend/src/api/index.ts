@@ -253,5 +253,42 @@ export const auditApi = {
     return apiRequest<{ items: unknown[]; totalCount: number }>(`/audit${qs}`)
   },
 
-  exportUrl: () => `${API_BASE}/audit/export`,
+  /**
+   * Streams the audit log as CSV and triggers a browser download.
+   * Uses the in-memory bearer token via apiRequest's auth flow — a plain
+   * <a href> cannot attach the token, so the server would reject it with 401.
+   */
+  downloadCsv: async (filename = 'audit-log.csv'): Promise<void> => {
+    const { accessToken } = useAuthStore.getState()
+    const res = await fetch(`${API_BASE}/audit/export`, {
+      credentials: 'include',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+
+    if (res.status === 401) {
+      const refreshed = await silentRefresh()
+      if (!refreshed) throw new ApiError(401, 'Session expired. Please log in again.')
+      const { accessToken: newToken } = useAuthStore.getState()
+      const retry = await fetch(`${API_BASE}/audit/export`, {
+        credentials: 'include',
+        headers: newToken ? { Authorization: `Bearer ${newToken}` } : {},
+      })
+      if (!retry.ok) throw new ApiError(retry.status, `Export failed: ${retry.status}`)
+      return triggerDownload(await retry.blob(), filename)
+    }
+
+    if (!res.ok) throw new ApiError(res.status, `Export failed: ${res.status}`)
+    return triggerDownload(await res.blob(), filename)
+  },
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }

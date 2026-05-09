@@ -6,11 +6,25 @@ import { auditApi } from '@/api'
 
 export function AuditLogPage() {
   const [page, setPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['audit', page],
     queryFn: () => auditApi.list({ page, pageSize: 100 }),
   })
+
+  const handleExport = async () => {
+    setIsExporting(true)
+    setExportError(null)
+    try {
+      await auditApi.downloadCsv()
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -21,16 +35,22 @@ export function AuditLogPage() {
           </Link>
           <h1 className="text-xl font-semibold">Audit Log</h1>
           <div className="ml-auto">
-            <a
-              href={auditApi.exportUrl()}
-              download
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border
-                         text-sm hover:bg-accent"
+                         text-sm hover:bg-accent disabled:opacity-50"
             >
-              <Download size={14} /> Export CSV
-            </a>
+              <Download size={14} /> {isExporting ? 'Exporting...' : 'Export CSV'}
+            </button>
           </div>
         </div>
+
+        {exportError && (
+          <div className="mb-4 p-3 rounded bg-destructive/10 text-destructive text-sm" role="alert">
+            {exportError}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="text-center text-muted-foreground py-8">Loading...</div>

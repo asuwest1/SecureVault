@@ -111,7 +111,16 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         options.TokenValidationParameters.IssuerSigningKey = key;
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // Super-admin actions require an authenticated principal whose
+    // is_super_admin claim is "true". JwtBearerEvents.OnForbidden above
+    // ensures policy failures return 403, distinguishing "logged in but
+    // forbidden" from "not authenticated".
+    options.AddPolicy("SuperAdmin", policy =>
+        policy.RequireAuthenticatedUser()
+              .RequireClaim("is_super_admin", "true"));
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rate Limiting

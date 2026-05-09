@@ -29,9 +29,9 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        RequireSuperAdmin();
         var users = await _db.Users
             .Include(u => u.UserRoles)
             .AsNoTracking()
@@ -68,10 +68,9 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Create([FromBody] CreateUserRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var callerUsername = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -105,10 +104,9 @@ public class UsersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateUserRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var callerUsername = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -131,10 +129,9 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         if (callerId == id) return BadRequest(new { error = "Cannot delete your own account." });
 
@@ -154,10 +151,9 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/roles")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> AssignRole(Guid id, [FromBody] AssignRoleRequest request, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var exists = await _db.UserRoles.AnyAsync(ur => ur.UserId == id && ur.RoleId == request.RoleId, ct);
         if (exists) return Conflict(new { error = "Role already assigned." });
 
@@ -173,10 +169,9 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}/roles/{roleId:guid}")]
+    [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> RemoveRole(Guid id, Guid roleId, CancellationToken ct)
     {
-        RequireSuperAdmin();
-
         var ur = await _db.UserRoles.FirstOrDefaultAsync(ur => ur.UserId == id && ur.RoleId == roleId, ct);
         if (ur == null) return NotFound();
 
@@ -215,10 +210,4 @@ public class UsersController : ControllerBase
 
     private bool IsSuperAdmin() =>
         bool.Parse(User.FindFirstValue("is_super_admin") ?? "false");
-
-    private void RequireSuperAdmin()
-    {
-        if (!IsSuperAdmin())
-            throw new UnauthorizedAccessException("Super admin required.");
-    }
 }
