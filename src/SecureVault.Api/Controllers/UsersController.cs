@@ -154,6 +154,14 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> AssignRole(Guid id, [FromBody] AssignRoleRequest request, CancellationToken ct)
     {
+        // Validate both ends of the relationship up front rather than relying
+        // on the DB FK violation, which would surface as a generic 500/409 with
+        // no useful detail to the caller.
+        if (!await _db.Users.AnyAsync(u => u.Id == id, ct))
+            return NotFound(new { error = "User not found." });
+        if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct))
+            return NotFound(new { error = "Role not found." });
+
         var exists = await _db.UserRoles.AnyAsync(ur => ur.UserId == id && ur.RoleId == request.RoleId, ct);
         if (exists) return Conflict(new { error = "Role already assigned." });
 
@@ -186,6 +194,13 @@ public class UsersController : ControllerBase
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         // Users can create tokens for themselves; super admins can create for any user
         if (!IsSuperAdmin() && callerId != id) return NotFound();
+
+        // Confirm the target user exists and is active before issuing a token.
+        // Otherwise we'd happily mint a token that the api-token middleware
+        // would reject on use, or fail with a DB FK violation if id is bogus.
+        var targetActive = await _db.Users
+            .AnyAsync(u => u.Id == id && u.IsActive, ct);
+        if (!targetActive) return NotFound();
 
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
         var tokenHash = Convert.ToHexString(

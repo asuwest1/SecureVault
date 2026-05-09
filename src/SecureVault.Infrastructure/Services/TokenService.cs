@@ -31,7 +31,8 @@ public class TokenService
         _signingKey = signingKey;
     }
 
-    public string GenerateAccessToken(User user, IEnumerable<Guid> roleIds)
+    public (string token, DateTimeOffset expiresAt) GenerateAccessToken(
+        User user, IEnumerable<Guid> roleIds)
     {
         var claims = new List<Claim>
         {
@@ -44,16 +45,17 @@ public class TokenService
         foreach (var roleId in roleIds)
             claims.Add(new Claim("role_ids", roleId.ToString()));
 
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(AccessTokenMinutes);
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256);
         var token = new JwtSecurityToken(
             issuer: _issuer,
             audience: _audience,
             claims: claims,
             notBefore: DateTime.UtcNow,
-            expires: DateTime.UtcNow.AddMinutes(AccessTokenMinutes),
+            expires: expiresAt.UtcDateTime,
             signingCredentials: credentials);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return (new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
 
     public string GenerateMfaChallengeToken(Guid userId, string username)

@@ -161,8 +161,29 @@ public class SyslogForwarder : IDisposable
 
     public void Dispose()
     {
-        _cts.Cancel();
+        // Stop accepting new entries first, then give the sender a bounded
+        // window to drain the channel. Without this drain, audit forwards
+        // queued at shutdown were silently dropped.
         _channel.Writer.TryComplete();
+
+        if (_senderTask != null)
+        {
+            try
+            {
+                if (!_senderTask.Wait(TimeSpan.FromSeconds(5)))
+                {
+                    _logger.LogWarning(
+                        "Syslog sender did not drain within 5s; forcing cancellation. " +
+                        "Pending forwards may be lost.");
+                }
+            }
+            catch (AggregateException ex)
+            {
+                _logger.LogWarning(ex, "Syslog sender threw during shutdown drain.");
+            }
+        }
+
+        _cts.Cancel();
         _stream?.Dispose();
         _client?.Dispose();
         _cts.Dispose();
