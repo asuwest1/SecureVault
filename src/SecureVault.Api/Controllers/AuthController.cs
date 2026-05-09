@@ -229,8 +229,8 @@ public class AuthController : ControllerBase
     private async Task<IActionResult> IssueTokensAsync(
         Core.Entities.User user, List<Guid> roleIds, string? ip, CancellationToken ct)
     {
-        var accessToken = _tokens.GenerateAccessToken(user, roleIds);
-        var (refreshToken, expiresAt) = await _tokens.GenerateRefreshTokenAsync(user.Id, ct);
+        var (accessToken, accessExpiresAt) = _tokens.GenerateAccessToken(user, roleIds);
+        var (refreshToken, refreshExpiresAt) = await _tokens.GenerateRefreshTokenAsync(user.Id, ct);
 
         // HttpOnly cookie scoped to refresh endpoint only
         Response.Cookies.Append("refresh_token", refreshToken, new CookieOptions
@@ -239,11 +239,11 @@ public class AuthController : ControllerBase
             Secure = true,
             SameSite = SameSiteMode.Strict,
             Path = "/api/v1/auth/refresh",
-            Expires = expiresAt.UtcDateTime
+            Expires = refreshExpiresAt.UtcDateTime
         });
 
         await _audit.LogAsync(AuditAction.AuthLogin, user.Id, user.Username, ipAddress: ip);
 
-        return Ok(new LoginResponse(accessToken, DateTimeOffset.UtcNow.AddMinutes(15)));
+        return Ok(new LoginResponse(accessToken, accessExpiresAt));
     }
 }

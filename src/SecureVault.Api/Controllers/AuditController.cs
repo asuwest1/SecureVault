@@ -13,6 +13,8 @@ namespace SecureVault.Api.Controllers;
 [Authorize(Policy = "SuperAdmin")]
 public class AuditController : ControllerBase
 {
+    private const int MaxPageSize = 1000;
+
     private readonly AppDbContext _db;
 
     public AuditController(AppDbContext db)
@@ -30,6 +32,11 @@ public class AuditController : ControllerBase
         [FromQuery] DateTimeOffset? to = null,
         CancellationToken ct = default)
     {
+        // Clamp pagination — negative or zero values would otherwise produce
+        // a negative OFFSET (DB error) or Take(0) (empty page with positive total).
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
         var query = _db.AuditLogs.AsNoTracking();
 
         if (actorUserId.HasValue) query = query.Where(a => a.ActorUserId == actorUserId);
@@ -41,7 +48,7 @@ public class AuditController : ControllerBase
         var items = await query
             .OrderByDescending(a => a.EventTime)
             .Skip((page - 1) * pageSize)
-            .Take(Math.Min(pageSize, 1000))  // Cap at 1000 per page
+            .Take(pageSize)
             .Select(a => new AuditLogResponse(
                 a.Id, a.Action.ToString(), a.ActorUserId, a.ActorUsername,
                 a.TargetType, a.TargetId, a.IpAddress, a.Detail, a.EventTime))
