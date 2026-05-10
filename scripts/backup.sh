@@ -14,10 +14,10 @@ set -euo pipefail
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/securevault}"
-MEK_FILE="${SECUREVAULT_KEY_FILE:-/run/secrets/securevault-mek}"
-PASSPHRASE_FILE="${BACKUP_PASSPHRASE_FILE:-/run/secrets/backup-passphrase}"
+MEK_FILE="${SECUREVAULT_KEY_FILE:-/etc/securevault/secrets/securevault-mek}"
+PASSPHRASE_FILE="${BACKUP_PASSPHRASE_FILE:-/etc/securevault/secrets/backup-passphrase}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
-DB_HOST="${DB_HOST:-db}"
+DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-securevault}"
 DB_USER="${DB_USER:-postgres}"

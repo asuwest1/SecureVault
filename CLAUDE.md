@@ -14,7 +14,7 @@ SecureVault is an on-premises, role-based secrets management application. It pro
 | Auth | JWT Bearer + Argon2id password hashing |
 | Reverse Proxy | Nginx (TLS termination, security headers) |
 | Testing | xUnit + Moq + FluentAssertions + Testcontainers |
-| Containerization | Docker + Docker Compose |
+| Deployment | Native (systemd on a Linux host) — no Docker |
 
 ---
 
@@ -34,7 +34,8 @@ frontend/
     stores/     # Zustand state management
     hooks/      # Custom React hooks
     utils/      # Utility functions
-scripts/        # backup.sh, restore.sh, db-setup.sql
+scripts/        # backup.sh, restore.sh, db-setup.sql,
+                # securevault.service, securevault.env.example
 nginx/          # nginx.conf (TLS, HSTS, CSP, rate limiting)
 .github/workflows/  # ci.yml, security-scan.yml
 ```
@@ -44,9 +45,11 @@ nginx/          # nginx.conf (TLS, HSTS, CSP, rate limiting)
 ## Build & Run
 
 ### Prerequisites
-- .NET 8.0.404 SDK (pinned in `global.json`)
-- Node.js 20
-- PostgreSQL 16 or Docker
+- .NET 8.0.404 SDK (pinned in `global.json`) — build time
+- ASP.NET Core 8 runtime — production host
+- Node.js 20 — build time
+- PostgreSQL 16 — installed natively on the host
+- Nginx 1.26+ — TLS termination on the host
 
 ### Local Development
 
@@ -62,14 +65,24 @@ npm ci
 npm run dev   # Vite dev server at http://localhost:5173
 ```
 
-### Docker (Full Stack)
+### Production Deploy (no Docker)
+
+Full instructions in `INSTALL.md`. Summary:
 
 ```bash
-docker build -t securevault:latest .
-docker-compose up -d
+# Build artifacts
+cd frontend && npm ci && npm run build && cd ..
+dotnet publish src/SecureVault.Api/SecureVault.Api.csproj -c Release -o ./publish
+cp -r frontend/dist/* ./publish/wwwroot/
 
-# Run database migrations
-docker-compose run migrator dotnet ef database update \
+# Install
+sudo rsync -a --delete ./publish/ /opt/securevault/
+sudo cp scripts/securevault.service /etc/systemd/system/
+sudo cp scripts/securevault.env.example /etc/securevault/securevault.env
+sudo systemctl daemon-reload && sudo systemctl enable --now securevault
+
+# Migrations (from source tree)
+dotnet ef database update \
   --project src/SecureVault.Infrastructure \
   --startup-project src/SecureVault.Api
 ```
@@ -125,7 +138,7 @@ cd frontend && npm run lint
 
 ## Architecture Decisions
 
-- **Two-Tier Encryption:** Master Encryption Key (MEK) stored in Docker secret, never in DB. Each secret has its own Data Encryption Key (DEK) encrypted by the MEK.
+- **Two-Tier Encryption:** Master Encryption Key (MEK) stored as a host file at `/etc/securevault/secrets/securevault-mek` (mode 0400, owned by the `securevault` service user), never in DB. Each secret has its own Data Encryption Key (DEK) encrypted by the MEK.
 - **Append-Only Audit Log:** Database revokes DELETE/UPDATE on `audit_log` from the application role — immutable by design.
 - **JWT + httpOnly Cookies:** Stateless API auth; tokens stored in httpOnly secure cookies.
 - **LDAP/AD in v1.0:** Configurable via `AUTH_MODE` environment variable.
@@ -140,7 +153,12 @@ cd frontend && npm run lint
 2. Backend: restore → build → unit tests → vulnerability scan
 3. Integration tests (Testcontainers + PostgreSQL)
 4. Trivy filesystem scan (fails on CRITICAL/HIGH CVEs)
-5. Docker build & push to GHCR (main branch only, cosign signed)
+
+> Note: the legacy `Dockerfile` and `docker-compose.yml` are no longer the
+> deployment path; production is now a native systemd install (see
+> `INSTALL.md`). The Docker assets remain in-repo only because the
+> Testcontainers-based integration test suite still requires a Docker
+> daemon.
 
 **`security-scan.yml`** — Weekly (Mondays 02:00 UTC):
 - CodeQL SAST (C# + JavaScript)
@@ -165,5 +183,8 @@ High-severity issues also exist around plaintext secret memory not being zeroed,
 - `SecureVault_PRD.md` — Product requirements and feature specifications
 - `SecureVault_TechSpec.md` — Technical architecture and design decisions
 - `CODE_REVIEW.md` — Security code review findings with severity ratings
-- `.env.example` — All required environment variables with descriptions
+- `INSTALL.md` — Step-by-step non-Docker installation guide
+- `.env.example` — Variables for shell scripts (backup/restore, db setup)
+- `scripts/securevault.env.example` — App env vars consumed by systemd
+- `scripts/securevault.service` — systemd unit (sandboxed, resource-limited)
 - `scripts/db-setup.sql` — Database initialization and audit log constraints

@@ -10,9 +10,9 @@
 set -euo pipefail
 
 BACKUP_FILE="${1:-}"
-PASSPHRASE_FILE="${BACKUP_PASSPHRASE_FILE:-/run/secrets/backup-passphrase}"
-MEK_DEST="${SECUREVAULT_KEY_FILE:-/run/secrets/securevault-mek}"
-DB_HOST="${DB_HOST:-db}"
+PASSPHRASE_FILE="${BACKUP_PASSPHRASE_FILE:-/etc/securevault/secrets/backup-passphrase}"
+MEK_DEST="${SECUREVAULT_KEY_FILE:-/etc/securevault/secrets/securevault-mek}"
+DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-securevault}"
 DB_USER="${DB_USER:-postgres}"
