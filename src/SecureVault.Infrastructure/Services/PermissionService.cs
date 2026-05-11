@@ -9,6 +9,8 @@ namespace SecureVault.Infrastructure.Services;
 /// Resolves ACL permissions per TechSpec §7.1.
 /// Resolution order: Super Admin → Secret ACL → Folder hierarchy → DENY
 /// Never caches — ACL changes take effect immediately.
+/// SQL Server-flavored raw SQL: recursive CTE without the WITH RECURSIVE keyword,
+/// role lists expanded inline as parameterised IN (...) clauses.
 /// </summary>
 public class PermissionService : IPermissionService
 {
@@ -74,26 +76,28 @@ public class PermissionService : IPermissionService
             return null;
         }
 
-        var sql = @"
-            WITH RECURSIVE folder_path AS (
+        // {0} = secretId, {1..N} = role ids
+        var roleInClause = BuildRoleInClause(roleIdList.Count, startIndex: 1);
+        var sql = $@"
+            WITH folder_path AS (
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
                 JOIN secrets s ON s.folder_id = f.id
-                WHERE s.id = {0} AND s.deleted_at IS NULL
+                WHERE s.id = {{0}} AND s.deleted_at IS NULL
                 UNION ALL
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
                 JOIN folder_path fp ON fp.parent_folder_id = f.id
             )
-            SELECT fa.permissions
+            SELECT fa.permissions AS Value
             FROM folder_acl fa
             JOIN folder_path fp ON fp.id = fa.folder_id
-            WHERE fa.role_id = ANY({1})
+            WHERE fa.role_id IN ({roleInClause})
         ";
 
-        var roleIdArray = roleIdList.ToArray();
+        var args = BuildArgs(secretId, roleIdList);
         var folderPermissions = await db.Database
-            .SqlQueryRaw<int>(sql, secretId, roleIdArray)
+            .SqlQueryRaw<int>(sql, args)
             .ToListAsync(cancellationToken);
 
         if (folderPermissions.Count > 0)
@@ -135,22 +139,23 @@ public class PermissionService : IPermissionService
             return nonRelationalCombined == SecretPermission.None ? null : nonRelationalCombined;
         }
 
-        var sql = @"
-            WITH RECURSIVE folder_path AS (
-                SELECT id, parent_folder_id FROM folders WHERE id = {0}
+        var roleInClause = BuildRoleInClause(roleIdList.Count, startIndex: 1);
+        var sql = $@"
+            WITH folder_path AS (
+                SELECT id, parent_folder_id FROM folders WHERE id = {{0}}
                 UNION ALL
                 SELECT f.id, f.parent_folder_id FROM folders f
                 JOIN folder_path fp ON fp.parent_folder_id = f.id
             )
-            SELECT fa.permissions
+            SELECT fa.permissions AS Value
             FROM folder_acl fa
             JOIN folder_path fp ON fp.id = fa.folder_id
-            WHERE fa.role_id = ANY({1})
+            WHERE fa.role_id IN ({roleInClause})
         ";
 
-        var roleIdArray = roleIdList.ToArray();
+        var args = BuildArgs(folderId, roleIdList);
         var permissions = await db.Database
-            .SqlQueryRaw<int>(sql, folderId, roleIdArray)
+            .SqlQueryRaw<int>(sql, args)
             .ToListAsync(cancellationToken);
 
         if (permissions.Count == 0) return null;
@@ -212,39 +217,39 @@ public class PermissionService : IPermissionService
         var roleIdList = roleIds.ToList();
         if (roleIdList.Count == 0) return Array.Empty<Guid>();
 
-        // Raw SQL per TechSpec §7.3 — EF cannot express this in one query
-        var sql = @"
-            SELECT DISTINCT s.id
+        // Top-level CTE that walks DOWN from folders with read ACL to all descendants.
+        // A secret is accessible if its folder ∈ descendants OR a secret-level ACL grants read.
+        var roleInClause = BuildRoleInClause(roleIdList.Count, startIndex: 0);
+        var sql = $@"
+            WITH acl_folders AS (
+                SELECT DISTINCT fa.folder_id AS id
+                FROM folder_acl fa
+                WHERE fa.role_id IN ({roleInClause})
+                AND (fa.permissions & 1) = 1
+            ),
+            descendants AS (
+                SELECT id, CAST(id AS uniqueidentifier) AS root_id FROM folders WHERE id IN (SELECT id FROM acl_folders)
+                UNION ALL
+                SELECT f.id, d.root_id FROM folders f
+                JOIN descendants d ON f.parent_folder_id = d.id
+            )
+            SELECT DISTINCT s.id AS Value
             FROM secrets s
             WHERE s.deleted_at IS NULL
             AND (
-                -- Secret-level ACL
                 EXISTS (
                     SELECT 1 FROM secret_acl sa
                     WHERE sa.secret_id = s.id
-                    AND sa.role_id = ANY({0})
+                    AND sa.role_id IN ({roleInClause})
                     AND (sa.permissions & 1) = 1
                 )
-                OR
-                -- Folder hierarchy ACL
-                EXISTS (
-                    WITH RECURSIVE folder_path AS (
-                        SELECT f.id, f.parent_folder_id FROM folders f WHERE f.id = s.folder_id
-                        UNION ALL
-                        SELECT f.id, f.parent_folder_id FROM folders f
-                        JOIN folder_path fp ON fp.parent_folder_id = f.id
-                    )
-                    SELECT 1 FROM folder_acl fa
-                    JOIN folder_path fp ON fp.id = fa.folder_id
-                    WHERE fa.role_id = ANY({0})
-                    AND (fa.permissions & 1) = 1
-                )
+                OR s.folder_id IN (SELECT id FROM descendants)
             )
         ";
 
-        var roleIdArray = roleIdList.ToArray();
+        var args = BuildArgs(null, roleIdList);
         var ids = await db.Database
-            .SqlQueryRaw<Guid>(sql, roleIdArray)
+            .SqlQueryRaw<Guid>(sql, args)
             .ToListAsync(cancellationToken);
 
         return ids;
@@ -270,35 +275,50 @@ public class PermissionService : IPermissionService
         var roleIdList = roleIds.ToList();
         if (roleIdList.Count == 0) return new HashSet<Guid>();
 
-        // Return folder IDs where the user has any permission via folder ACL hierarchy,
-        // plus all ancestor folders (so the tree can be rendered).
-        var sql = @"
-            WITH RECURSIVE
-            -- Folders with direct ACL for user's roles
-            acl_folders AS (
+        // Folders with direct ACL plus all ancestor folders (for tree rendering).
+        var roleInClause = BuildRoleInClause(roleIdList.Count, startIndex: 0);
+        var sql = $@"
+            WITH acl_folders AS (
                 SELECT DISTINCT fa.folder_id AS id
                 FROM folder_acl fa
-                WHERE fa.role_id = ANY({0})
+                WHERE fa.role_id IN ({roleInClause})
                 AND fa.permissions > 0
             ),
-            -- Walk UP to include all ancestor folders for tree rendering
             ancestors AS (
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
                 WHERE f.id IN (SELECT id FROM acl_folders)
-                UNION
+                UNION ALL
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
                 JOIN ancestors a ON a.parent_folder_id = f.id
             )
-            SELECT DISTINCT id FROM ancestors
+            SELECT DISTINCT id AS Value FROM ancestors
         ";
 
-        var roleIdArray = roleIdList.ToArray();
+        var args = BuildArgs(null, roleIdList);
         var ids = await db.Database
-            .SqlQueryRaw<Guid>(sql, roleIdArray)
+            .SqlQueryRaw<Guid>(sql, args)
             .ToListAsync(cancellationToken);
 
         return ids.ToHashSet();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SQL Server-friendly helpers: build a positional IN ({startIndex},{startIndex+1},...)
+    // clause whose tokens line up with the args supplied to SqlQueryRaw.
+    // ─────────────────────────────────────────────────────────────────────────
+    private static string BuildRoleInClause(int count, int startIndex)
+    {
+        if (count == 0) return "NULL";
+        return string.Join(",", Enumerable.Range(startIndex, count).Select(i => "{" + i + "}"));
+    }
+
+    private static object[] BuildArgs(object? leading, IReadOnlyCollection<Guid> roleIds)
+    {
+        var args = new List<object>(roleIds.Count + (leading is null ? 0 : 1));
+        if (leading is not null) args.Add(leading);
+        foreach (var r in roleIds) args.Add(r);
+        return args.ToArray();
     }
 }

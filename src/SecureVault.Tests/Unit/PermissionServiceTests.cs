@@ -10,7 +10,7 @@ namespace SecureVault.Tests.Unit;
 
 /// <summary>
 /// Full ACL matrix tests for PermissionService.
-/// Uses an in-memory mock — real PostgreSQL CTE tests are in Integration/.
+/// Uses an in-memory mock — real SQL Server CTE tests are in Integration/.
 /// </summary>
 public class PermissionServiceTests : IAsyncDisposable
 {
@@ -25,7 +25,7 @@ public class PermissionServiceTests : IAsyncDisposable
 
     public PermissionServiceTests()
     {
-        // Note: For PostgreSQL-specific features (CTE, GIN), use Testcontainers in Integration/
+        // Note: For SQL Server-specific features (recursive CTEs), use Testcontainers in Integration/
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;

@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using Testcontainers.PostgreSql;
+using Testcontainers.MsSql;
 using SecureVault.Core.Interfaces;
 using SecureVault.Infrastructure.Data;
 using SecureVault.Infrastructure.Services;
@@ -18,7 +18,7 @@ using Xunit;
 namespace SecureVault.Tests.Integration;
 
 /// <summary>
-/// Integration tests for the authentication flow using Testcontainers (real PostgreSQL 16).
+/// Integration tests for the authentication flow using Testcontainers (real Microsoft SQL Server 2022).
 /// Tests run against real migrations — validates migration idempotency.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -27,11 +27,11 @@ public class AuthFlowTests : IAsyncLifetime
     private readonly string _jwtKeyPath = Path.Combine(Path.GetTempPath(), $"jwt-auth-{Guid.NewGuid()}.pem");
     private readonly string _mekFilePath = Path.GetTempFileName();
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithDatabase("securevault_test")
-        .WithUsername("test")
-        .WithPassword("testpass")
+    // Testcontainers.MsSql exposes the `sa` user; the DB name is fixed to "master".
+    // Tests create per-fixture databases via the connection string below.
+    private readonly MsSqlContainer _sqlServer = new MsSqlBuilder()
+        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+        .WithPassword("yourStrong(!)Password1")
         .Build();
 
     private WebApplicationFactory<Program>? _factory;
@@ -41,7 +41,7 @@ public class AuthFlowTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        await _sqlServer.StartAsync();
         WriteJwtKey(_jwtKeyPath);
 
         // Generate MEK before factory creation
@@ -72,8 +72,8 @@ public class AuthFlowTests : IAsyncLifetime
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
                     services.AddDbContextFactory<AppDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString())
-                               .UseSnakeCaseNamingConvention());
+                        options.UseSqlServer(_sqlServer.GetConnectionString())
+                               );
                     services.AddScoped(sp =>
                         sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
@@ -234,7 +234,7 @@ public class AuthFlowTests : IAsyncLifetime
     {
         _client?.Dispose();
         if (_factory != null) await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
+        await _sqlServer.DisposeAsync();
 
         if (File.Exists(_jwtKeyPath))
             File.Delete(_jwtKeyPath);

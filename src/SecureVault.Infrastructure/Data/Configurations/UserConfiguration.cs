@@ -11,7 +11,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.ToTable("users");
         builder.HasKey(u => u.Id);
 
-        builder.Property(u => u.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+        builder.Property(u => u.Id).HasColumnName("id").HasDefaultValueSql("NEWID()");
         builder.Property(u => u.Username).HasColumnName("username").HasMaxLength(100).IsRequired();
         builder.Property(u => u.Email).HasColumnName("email").HasMaxLength(254).IsRequired();
         builder.Property(u => u.PasswordHash).HasColumnName("password_hash").HasMaxLength(512);
@@ -21,9 +21,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.FailedAttempts).HasColumnName("failed_attempts").HasDefaultValue(0);
         builder.Property(u => u.LockedUntil).HasColumnName("locked_until");
         builder.Property(u => u.MfaEnabled).HasColumnName("mfa_enabled").HasDefaultValue(false);
-        builder.Property(u => u.MfaSecretEnc).HasColumnName("mfa_secret_enc").HasColumnType("bytea");
-        builder.Property(u => u.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
-        builder.Property(u => u.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+        builder.Property(u => u.MfaSecretEnc).HasColumnName("mfa_secret_enc").HasColumnType("varbinary(max)");
+        builder.Property(u => u.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(u => u.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("SYSUTCDATETIME()");
 
         builder.HasIndex(u => u.Username).IsUnique();
         builder.HasIndex(u => u.Email).IsUnique();

@@ -14,10 +14,10 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.ToTable("audit_log");
         builder.HasKey(a => a.Id);
 
-        // BIGSERIAL identity column
+        // BIGINT IDENTITY column
         builder.Property(a => a.Id)
             .HasColumnName("id")
-            .UseIdentityByDefaultColumn();
+            .UseIdentityColumn();
 
         builder.Property(a => a.Action)
             .HasColumnName("action")
@@ -30,12 +30,12 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(a => a.IpAddress).HasColumnName("ip_address").HasMaxLength(45);  // IPv6 max length
         builder.Property(a => a.EventTime)
             .HasColumnName("event_time")
-            .HasDefaultValueSql("NOW()");
+            .HasDefaultValueSql("SYSUTCDATETIME()");
 
         // Detail stored as JSONB — never contains decrypted values, DEK, or nonce
         builder.Property(a => a.Detail)
             .HasColumnName("detail")
-            .HasColumnType("jsonb")
+            .HasColumnType("nvarchar(max)")
             .HasConversion(
                 v => v == null ? null : JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                 v => v == null ? null : JsonSerializer.Deserialize<Dictionary<string, object?>>(v, (JsonSerializerOptions?)null),

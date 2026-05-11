@@ -29,14 +29,14 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Database — PostgreSQL via Npgsql EF Core
+// Database — Microsoft SQL Server via Microsoft.EntityFrameworkCore.SqlServer
 // ─────────────────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default"))
+    options.UseSqlServer(builder.Configuration.GetConnectionString("Default"))
            .UseSnakeCaseNamingConvention());
 
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default"))
+    options.UseSqlServer(builder.Configuration.GetConnectionString("Default"))
            .UseSnakeCaseNamingConvention());
 
 // ─────────────────────────────────────────────────────────────────────────────
