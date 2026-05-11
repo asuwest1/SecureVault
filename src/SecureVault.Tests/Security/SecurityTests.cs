@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using Testcontainers.PostgreSql;
+using Testcontainers.MsSql;
 using SecureVault.Core.Interfaces;
 using SecureVault.Infrastructure.Data;
 using SecureVault.Infrastructure.Services;
@@ -31,11 +31,9 @@ public class SecurityTests : IAsyncLifetime
     private readonly string _jwtKeyPath = Path.Combine(Path.GetTempPath(), $"jwt-sec-{Guid.NewGuid()}.pem");
     private readonly string _mekFilePath = Path.GetTempFileName();
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .WithDatabase("securevault_sec_test")
-        .WithUsername("test")
-        .WithPassword("testpass")
+    private readonly MsSqlContainer _sqlServer = new MsSqlBuilder()
+        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+        .WithPassword("yourStrong(!)Password1")
         .Build();
 
     private WebApplicationFactory<Program>? _factory;
@@ -45,7 +43,7 @@ public class SecurityTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        await _sqlServer.StartAsync();
         WriteJwtKey(_jwtKeyPath);
 
         // Generate MEK before factory creation
@@ -73,8 +71,8 @@ public class SecurityTests : IAsyncLifetime
                     services.RemoveAll<IDbContextFactory<AppDbContext>>();
 
                     services.AddDbContextFactory<AppDbContext>(options =>
-                        options.UseNpgsql(_postgres.GetConnectionString())
-                               .UseSnakeCaseNamingConvention());
+                        options.UseSqlServer(_sqlServer.GetConnectionString())
+                               );
                     services.AddScoped(sp =>
                         sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
@@ -342,7 +340,7 @@ public class SecurityTests : IAsyncLifetime
     {
         _client?.Dispose();
         if (_factory != null) await _factory.DisposeAsync();
-        await _postgres.DisposeAsync();
+        await _sqlServer.DisposeAsync();
 
         if (File.Exists(_jwtKeyPath))
             File.Delete(_jwtKeyPath);

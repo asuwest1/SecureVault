@@ -1,6 +1,5 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -17,15 +16,15 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 columns: table => new
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    action = table.Column<int>(type: "integer", nullable: false),
-                    actor_user_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    actor_username = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    target_type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
-                    target_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    ip_address = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
-                    detail = table.Column<string>(type: "jsonb", nullable: true),
-                    event_time = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    action = table.Column<int>(type: "int", nullable: false),
+                    actor_user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    actor_username = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    target_type = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
+                    target_id = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    ip_address = table.Column<string>(type: "nvarchar(45)", maxLength: 45, nullable: true),
+                    detail = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    event_time = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -36,10 +35,10 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "roles",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    description = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -50,19 +49,19 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "users",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    username = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    email = table.Column<string>(type: "character varying(254)", maxLength: 254, nullable: false),
-                    password_hash = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
-                    is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
-                    is_super_admin = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
-                    is_ldap_user = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
-                    failed_attempts = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
-                    locked_until = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    mfa_enabled = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
-                    mfa_secret_enc = table.Column<byte[]>(type: "bytea", nullable: true),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    username = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    email = table.Column<string>(type: "nvarchar(254)", maxLength: 254, nullable: false),
+                    password_hash = table.Column<string>(type: "nvarchar(512)", maxLength: 512, nullable: true),
+                    is_active = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
+                    is_super_admin = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    is_ldap_user = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    failed_attempts = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    locked_until = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    mfa_enabled = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    mfa_secret_enc = table.Column<byte[]>(type: "varbinary(max)", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()"),
+                    updated_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -73,36 +72,38 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "folders",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    parent_folder_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    depth = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    name = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
+                    parent_folder_id = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    depth = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()"),
+                    updated_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_folders", x => x.id);
+                    // SQL Server does not allow ON DELETE CASCADE on self-referencing FKs.
+                    // Use NO ACTION; folder deletion cascade is enforced in application code.
                     table.ForeignKey(
                         name: "FK_folders_folders_parent_folder_id",
                         column: x => x.parent_folder_id,
                         principalTable: "folders",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.NoAction);
                 });
 
             migrationBuilder.CreateTable(
                 name: "api_tokens",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    token_hash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
-                    last_used_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    is_revoked = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    token_hash = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    expires_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()"),
+                    last_used_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    is_revoked = table.Column<bool>(type: "bit", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -119,12 +120,12 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "refresh_tokens",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    token_hash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
-                    is_revoked = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false)
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    token_hash = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    expires_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()"),
+                    is_revoked = table.Column<bool>(type: "bit", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -141,9 +142,9 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "user_roles",
                 columns: table => new
                 {
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    role_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    assigned_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    role_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    assigned_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -166,10 +167,10 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "folder_acl",
                 columns: table => new
                 {
-                    folder_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    role_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    permissions = table.Column<int>(type: "integer", nullable: false),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    folder_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    role_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    permissions = table.Column<int>(type: "int", nullable: false),
+                    updated_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -180,35 +181,36 @@ namespace SecureVault.Infrastructure.Data.Migrations
                         principalTable: "folders",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
+                    // SQL Server: multiple cascade paths not allowed; use NO ACTION on roles.
                     table.ForeignKey(
                         name: "FK_folder_acl_roles_role_id",
                         column: x => x.role_id,
                         principalTable: "roles",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.NoAction);
                 });
 
             migrationBuilder.CreateTable(
                 name: "secrets",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    username = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
-                    url = table.Column<string>(type: "character varying(2048)", maxLength: 2048, nullable: true),
-                    notes = table.Column<string>(type: "character varying(4096)", maxLength: 4096, nullable: true),
-                    type = table.Column<int>(type: "integer", nullable: false),
-                    tags = table.Column<string[]>(type: "varchar(64)[]", nullable: false),
-                    value_enc = table.Column<byte[]>(type: "bytea", nullable: false),
-                    dek_enc = table.Column<byte[]>(type: "bytea", nullable: false),
-                    nonce = table.Column<byte[]>(type: "bytea", nullable: false),
-                    folder_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    created_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    updated_by_user_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
-                    deleted_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    purge_after = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    name = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
+                    username = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
+                    url = table.Column<string>(type: "nvarchar(2048)", maxLength: 2048, nullable: true),
+                    notes = table.Column<string>(type: "nvarchar(4096)", maxLength: 4096, nullable: true),
+                    type = table.Column<int>(type: "int", nullable: false),
+                    tags = table.Column<string>(type: "nvarchar(2048)", nullable: false, defaultValue: ""),
+                    value_enc = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    dek_enc = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    nonce = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    folder_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    created_by_user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    updated_by_user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()"),
+                    updated_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()"),
+                    deleted_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    purge_after = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -231,10 +233,10 @@ namespace SecureVault.Infrastructure.Data.Migrations
                 name: "secret_acl",
                 columns: table => new
                 {
-                    secret_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    role_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    permissions = table.Column<int>(type: "integer", nullable: false),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    secret_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    role_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    permissions = table.Column<int>(type: "int", nullable: false),
+                    updated_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -250,22 +252,22 @@ namespace SecureVault.Infrastructure.Data.Migrations
                         column: x => x.role_id,
                         principalTable: "roles",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.NoAction);
                 });
 
             migrationBuilder.CreateTable(
                 name: "secret_versions",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
-                    secret_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    version_number = table.Column<int>(type: "integer", nullable: false),
-                    notes = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    value_enc = table.Column<byte[]>(type: "bytea", nullable: false),
-                    dek_enc = table.Column<byte[]>(type: "bytea", nullable: false),
-                    nonce = table.Column<byte[]>(type: "bytea", nullable: false),
-                    created_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                    id = table.Column<Guid>(type: "uniqueidentifier", nullable: false, defaultValueSql: "NEWID()"),
+                    secret_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    version_number = table.Column<int>(type: "int", nullable: false),
+                    notes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    value_enc = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    dek_enc = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    nonce = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    created_by_user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false, defaultValueSql: "SYSUTCDATETIME()")
                 },
                 constraints: table =>
                 {
@@ -298,29 +300,47 @@ namespace SecureVault.Infrastructure.Data.Migrations
             migrationBuilder.CreateIndex(name: "IX_users_email", table: "users", column: "email", unique: true);
             migrationBuilder.CreateIndex(name: "IX_users_username", table: "users", column: "username", unique: true);
 
-            // Full-text search vector on secrets (name + username + notes + tags)
+            // Append-only audit log: block UPDATE/DELETE via INSTEAD OF triggers.
+            // Replaces the historical PostgreSQL REVOKE UPDATE,DELETE pattern.
             migrationBuilder.Sql(@"
-                ALTER TABLE secrets
-                ADD COLUMN search_vector tsvector
-                GENERATED ALWAYS AS (
-                    to_tsvector('english',
-                        coalesce(name, '') || ' ' ||
-                        coalesce(username, '') || ' ' ||
-                        coalesce(notes, '') || ' ' ||
-                        coalesce(array_to_string(tags, ' '), '')
-                    )
-                ) STORED;
+                CREATE TRIGGER trg_audit_log_no_update ON audit_log
+                INSTEAD OF UPDATE AS
+                BEGIN
+                    RAISERROR('audit_log is append-only; UPDATE is not permitted.', 16, 1);
+                    ROLLBACK TRANSACTION;
+                END;
             ");
 
-            migrationBuilder.Sql("CREATE INDEX IX_secrets_search_vector ON secrets USING GIN (search_vector);");
+            migrationBuilder.Sql(@"
+                CREATE TRIGGER trg_audit_log_no_delete ON audit_log
+                INSTEAD OF DELETE AS
+                BEGIN
+                    -- Allow DELETE only when the executing principal is a member of db_owner,
+                    -- so the scheduled retention job (run as db_owner) can purge old rows.
+                    IF IS_MEMBER('db_owner') = 1
+                    BEGIN
+                        DELETE FROM audit_log
+                        WHERE id IN (SELECT id FROM deleted);
+                    END
+                    ELSE
+                    BEGIN
+                        RAISERROR('audit_log is append-only; DELETE is restricted to db_owner.', 16, 1);
+                        ROLLBACK TRANSACTION;
+                    END
+                END;
+            ");
 
-            // GIN index on tags array
-            migrationBuilder.Sql("CREATE INDEX IX_secrets_tags ON secrets USING GIN (tags);");
+            // Full-text search: SQL Server's full-text catalog is optional and not always
+            // available (LocalDB / Express edition without full-text installed). The application
+            // falls back to LIKE-based search on name/username/notes; see SecretsController.
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("DROP TRIGGER IF EXISTS trg_audit_log_no_update;");
+            migrationBuilder.Sql("DROP TRIGGER IF EXISTS trg_audit_log_no_delete;");
+
             migrationBuilder.DropTable(name: "audit_log");
             migrationBuilder.DropTable(name: "secret_acl");
             migrationBuilder.DropTable(name: "secret_versions");

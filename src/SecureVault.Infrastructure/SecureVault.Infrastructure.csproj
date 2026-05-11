@@ -14,8 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- PostgreSQL EF Core provider -->
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
+    <!-- Microsoft SQL Server EF Core provider -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.10" />
     <!-- EF Core snake_case naming conventions -->
     <PackageReference Include="EFCore.NamingConventions" Version="8.0.3" />
     <!-- Argon2id password hashing -->

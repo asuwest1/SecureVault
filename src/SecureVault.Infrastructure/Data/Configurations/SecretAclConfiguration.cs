@@ -14,7 +14,7 @@ public class SecretAclConfiguration : IEntityTypeConfiguration<SecretAcl>
         builder.Property(sa => sa.SecretId).HasColumnName("secret_id");
         builder.Property(sa => sa.RoleId).HasColumnName("role_id");
         builder.Property(sa => sa.Permissions).HasColumnName("permissions").HasConversion<int>();
-        builder.Property(sa => sa.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+        builder.Property(sa => sa.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("SYSUTCDATETIME()");
 
         builder.HasOne(sa => sa.Secret)
             .WithMany(s => s.SecretAcls)

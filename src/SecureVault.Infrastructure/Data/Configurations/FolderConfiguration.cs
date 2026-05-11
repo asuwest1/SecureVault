@@ -11,12 +11,12 @@ public class FolderConfiguration : IEntityTypeConfiguration<Folder>
         builder.ToTable("folders");
         builder.HasKey(f => f.Id);
 
-        builder.Property(f => f.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
+        builder.Property(f => f.Id).HasColumnName("id").HasDefaultValueSql("NEWID()");
         builder.Property(f => f.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(f => f.ParentFolderId).HasColumnName("parent_folder_id");
         builder.Property(f => f.Depth).HasColumnName("depth").HasDefaultValue(0);
-        builder.Property(f => f.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("NOW()");
-        builder.Property(f => f.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+        builder.Property(f => f.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(f => f.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("SYSUTCDATETIME()");
 
         builder.HasOne(f => f.ParentFolder)
             .WithMany(f => f.Children)

@@ -1,467 +1,244 @@
-# SecureVault — Installation Guide (Non-Docker)
+# SecureVault Installation Guide — Windows Server + SQL Server
 
-This guide installs SecureVault directly on a Linux host without Docker.
-Postgres, the .NET runtime, and Nginx are installed as native packages, and
-the API runs under systemd as a dedicated service user.
-
----
-
-## Table of Contents
-
-1. [Prerequisites](#1-prerequisites)
-2. [Create the Service User & Directories](#2-create-the-service-user--directories)
-3. [Install PostgreSQL & Initialize the Database](#3-install-postgresql--initialize-the-database)
-4. [Generate Secrets](#4-generate-secrets)
-5. [Build & Install the Application](#5-build--install-the-application)
-6. [Configure Environment](#6-configure-environment)
-7. [Install the systemd Service](#7-install-the-systemd-service)
-8. [Run Database Migrations](#8-run-database-migrations)
-9. [Configure Nginx (TLS Termination)](#9-configure-nginx-tls-termination)
-10. [First-Run Initialization](#10-first-run-initialization)
-11. [Verify the Deployment](#11-verify-the-deployment)
-12. [Configure Backups](#12-configure-backups)
-13. [LDAP / Active Directory (Optional)](#13-ldap--active-directory-optional)
-14. [Local Development Setup](#14-local-development-setup)
-15. [Upgrading](#15-upgrading)
-16. [Uninstalling](#16-uninstalling)
+This guide walks through a fresh install of SecureVault on Windows Server with
+Microsoft SQL Server as the database and IIS as the TLS-terminating reverse
+proxy in front of the .NET 8 Kestrel backend.
 
 ---
 
 ## 1. Prerequisites
 
-### Server Requirements
+| Component | Required Version |
+|-----------|------------------|
+| Windows Server | 2019 or 2022 (x64) |
+| .NET 8 Hosting Bundle | 8.0.x (includes ASP.NET Core runtime + IIS module) |
+| .NET SDK | 8.0.404 (build host only — pinned in `global.json`) |
+| Node.js | 20 LTS (build host only) |
+| Microsoft SQL Server | 2019 or 2022 — Express, Standard, or Enterprise |
+| sqlcmd / sqlpackage | Bundled with SQL Server tools |
+| IIS | With **URL Rewrite** + **Application Request Routing (ARR) 3.0** |
+| PowerShell | 5.1 or PowerShell 7+ |
 
-| Resource | Minimum | Recommended |
-|----------|---------|-------------|
-| CPU      | 1 vCPU  | 2+ vCPUs    |
-| RAM      | 1 GB    | 2 GB        |
-| Disk     | 10 GB   | 50 GB       |
-| OS       | Linux (kernel 4.0+) | Ubuntu 22.04 LTS / Debian 12 / RHEL 9 |
+Open ports:
+- **443/tcp** (IIS, public)
+- **80/tcp** (IIS, optional HTTP→HTTPS redirect)
+- **1433/tcp** (SQL Server, localhost only by default)
 
-### Software Dependencies
+The Kestrel backend listens on **127.0.0.1:8080** and must NOT be exposed.
 
-| Tool | Minimum Version | Notes |
-|------|----------------|-------|
-| .NET ASP.NET Runtime | 8.0.x | Required at runtime |
-| .NET SDK | 8.0.404 (pinned in `global.json`) | Required at build time only |
-| Node.js | 20.x LTS | Required at build time only |
-| PostgreSQL | 16.x | psql 15+ for `\getenv` in `db-setup.sql` |
-| Nginx | 1.26+ | TLS termination & reverse proxy |
-| OpenSSL | 3.x | Certificate and key generation |
-| systemd | 245+ | Service management & sandboxing |
+---
 
-Install on Ubuntu/Debian:
+## 2. Install SQL Server
 
-```bash
-sudo apt update
-sudo apt install -y postgresql-16 nginx openssl curl ca-certificates
-# .NET 8 (Microsoft package repo)
-sudo apt install -y dotnet-sdk-8.0 aspnetcore-runtime-8.0
-# Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
-sudo apt install -y nodejs
+Install SQL Server with Database Engine Services and enable **Mixed-Mode**
+authentication if you plan to use a SQL login (the default in this guide).
+Alternatively, use **Windows Authentication** with the virtual service account
+created by `install-windows-service.ps1` — see the env-file template for both
+connection-string forms.
+
+After installation, confirm the instance is reachable:
+
+```powershell
+sqlcmd -S localhost -E -Q "SELECT @@VERSION"
 ```
 
 ---
 
-## 2. Create the Service User & Directories
+## 3. Build the application (developer workstation)
 
-```bash
-sudo useradd --system --home-dir /opt/securevault --shell /usr/sbin/nologin securevault
-
-sudo install -d -o securevault -g securevault -m 0750 /opt/securevault
-sudo install -d -o securevault -g securevault -m 0750 /var/log/securevault
-sudo install -d -o securevault -g securevault -m 0750 /var/lib/securevault
-sudo install -d -o root        -g securevault -m 0750 /etc/securevault
-sudo install -d -o root        -g securevault -m 0750 /etc/securevault/secrets
-sudo install -d -o root        -g root        -m 0755 /etc/nginx/certs
-```
-
-`/var/lib/securevault` holds the ASP.NET Data Protection key ring;
-`/var/log/securevault` is where the systemd unit's `ReadWritePaths` allows
-log writes.
-
----
-
-## 3. Install PostgreSQL & Initialize the Database
-
-### 3.1 Bind PostgreSQL to localhost only
-
-Edit `/etc/postgresql/16/main/postgresql.conf`:
-
-```
-listen_addresses = '127.0.0.1'
-```
-
-Add a `pg_hba.conf` rule for the application role
-(`/etc/postgresql/16/main/pg_hba.conf`):
-
-```
-# TYPE  DATABASE     USER              ADDRESS         METHOD
-host    securevault  securevault_app   127.0.0.1/32    scram-sha-256
-```
-
-Then `sudo systemctl restart postgresql`.
-
-### 3.2 Create the database and apply `db-setup.sql`
-
-```bash
-sudo -u postgres createdb securevault
-
-# Apply role + grants. DB_PASSWORD is read by `\getenv` inside the script
-# and used as the password for the securevault_app role.
-DB_PASSWORD='<strong-app-password>' \
-  sudo -u postgres psql -d securevault -v ON_ERROR_STOP=1 \
-  -f scripts/db-setup.sql
-```
-
-The script also contains a `REVOKE DELETE, UPDATE ON audit_log` block — it is
-a no-op until migrations have created the table. **Re-run the same script
-after step 8** to enforce the append-only invariant.
-
----
-
-## 4. Generate Secrets
-
-```bash
-# 32 raw bytes for the Master Encryption Key (AES-256-GCM)
-sudo openssl rand -out /etc/securevault/secrets/securevault-mek 32
-
-# 2048-bit RSA private key for JWT (RS256) signing
-sudo openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-    -out /etc/securevault/secrets/jwt-signing.pem
-
-# Strong random passphrase for backup encryption
-sudo sh -c 'openssl rand -base64 48 > /etc/securevault/secrets/backup-passphrase'
-
-# Lock down ownership and permissions — readable only by the service user
-sudo chown securevault:securevault /etc/securevault/secrets/*
-sudo chmod 0400 /etc/securevault/secrets/*
-```
-
-> **Important:** Back up `securevault-mek` immediately. Losing it makes all
-> encrypted secrets unrecoverable.
-
----
-
-## 5. Build & Install the Application
-
-Build on the host (or on a build machine and copy the artifacts over):
-
-```bash
-# Frontend
+```powershell
+# Frontend bundle
 cd frontend
 npm ci
-npm run build       # produces frontend/dist/
+npm run build
 cd ..
 
-# Backend
-dotnet restore --use-lock-file
-dotnet publish src/SecureVault.Api/SecureVault.Api.csproj \
-    -c Release \
-    -o ./publish \
-    --no-restore
+# Backend publish (creates .\publish with all required DLLs + wwwroot)
+dotnet publish src\SecureVault.Api\SecureVault.Api.csproj -c Release -o .\publish
+Copy-Item -Recurse frontend\dist\* .\publish\wwwroot\
+```
 
-# Copy the SPA into wwwroot
-mkdir -p ./publish/wwwroot
-cp -r frontend/dist/* ./publish/wwwroot/
+Copy `.\publish\*` to the server at `C:\Program Files\SecureVault\`.
 
-# Install to /opt/securevault
-sudo rsync -a --delete ./publish/ /opt/securevault/
-sudo chown -R securevault:securevault /opt/securevault
-sudo chmod -R a-w /opt/securevault          # read-only at runtime
+---
+
+## 4. Lay out the data directory and ACLs
+
+`install-windows-service.ps1` performs this automatically, but the layout for
+reference:
+
+```
+C:\ProgramData\SecureVault\
+  ├── secrets\                     (ACL: NT SERVICE\SecureVault read-only)
+  │     ├── securevault-mek.bin    (32 bytes, AES-256 MEK)
+  │     ├── jwt-signing.pem        (RSA private key for JWT RS256)
+  │     └── backup-passphrase.txt  (passphrase for backup.ps1)
+  ├── keyring\                     (DataProtection key ring, modify)
+  ├── logs\                        (structured logs, modify)
+  ├── backups\                     (PowerShell backup output, modify)
+  └── securevault.env              (service environment block)
+```
+
+### Generate the MEK and JWT key
+
+```powershell
+$mek = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($mek)
+[System.IO.File]::WriteAllBytes('C:\ProgramData\SecureVault\secrets\securevault-mek.bin', $mek)
+
+# JWT RSA key (2048-bit, PKCS#8 PEM)
+$rsa = [System.Security.Cryptography.RSA]::Create(2048)
+$pem = "-----BEGIN PRIVATE KEY-----`n" +
+       [Convert]::ToBase64String($rsa.ExportPkcs8PrivateKey(), 'InsertLineBreaks') +
+       "`n-----END PRIVATE KEY-----"
+Set-Content -LiteralPath 'C:\ProgramData\SecureVault\secrets\jwt-signing.pem' -Value $pem -Encoding ASCII
+
+# Backup passphrase (CSPRNG — store on a different volume in production)
+$bytes = New-Object byte[] 48
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+[Convert]::ToBase64String($bytes) | Set-Content `
+    -LiteralPath 'C:\ProgramData\SecureVault\secrets\backup-passphrase.txt' -Encoding ASCII
 ```
 
 ---
 
-## 6. Configure Environment
+## 5. Provision the database
 
-```bash
-sudo cp scripts/securevault.env.example /etc/securevault/securevault.env
-sudo chown root:securevault /etc/securevault/securevault.env
-sudo chmod 0640 /etc/securevault/securevault.env
-sudo $EDITOR /etc/securevault/securevault.env
+```powershell
+# 1) Apply schema via EF Core (run from the source tree on the build host).
+dotnet ef database update `
+    --project src\SecureVault.Infrastructure `
+    --startup-project src\SecureVault.Api `
+    --connection "Server=<db-host>;Database=securevault;User Id=sa;Password=<sa_pwd>;TrustServerCertificate=True"
+
+# 2) Create the application login + least-privilege grants + DENY UPDATE/DELETE
+#    on audit_log. Run from the build host or directly on the server.
+sqlcmd -S localhost -U sa -P <sa_pwd> -i scripts\db-setup.sql `
+       -v DbName="securevault" AppLogin="securevault_app" AppPassword="<app_pwd>"
 ```
 
-Required values:
-
-- `ConnectionStrings__Default` — set the password to the
-  `securevault_app` password from step 3.
-- `AllowedHosts` — your FQDN, e.g. `vault.example.com`.
-- `Auth__Mode` — `local` (default) or `ldap`.
-- `Syslog__Host` — optional SIEM forwarder.
-
-`SECUREVAULT_KEY_FILE` and `Auth__JwtSigningKeyPath` already point to
-`/etc/securevault/secrets/...` — do not change unless you moved the files.
+The EF Core migration installs `INSTEAD OF UPDATE` and `INSTEAD OF DELETE`
+triggers on `dbo.audit_log` to enforce append-only semantics; `db-setup.sql`
+additionally `DENY`s those permissions to the app login for defense in depth.
 
 ---
 
-## 7. Install the systemd Service
+## 6. Install the Windows Service
 
-```bash
-sudo cp scripts/securevault.service /etc/systemd/system/securevault.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now securevault.service
-sudo systemctl status securevault.service
+From an elevated PowerShell prompt on the server:
+
+```powershell
+# Fill in C:\ProgramData\SecureVault\securevault.env from the template first.
+Copy-Item scripts\securevault.env.example C:\ProgramData\SecureVault\securevault.env
+notepad   C:\ProgramData\SecureVault\securevault.env
+
+# Then install + start the service.
+.\scripts\install-windows-service.ps1
+Start-Service SecureVault
+
+# Verify Kestrel is up on 127.0.0.1:8080
+Invoke-WebRequest http://127.0.0.1:8080/api/v1/setup/status -UseBasicParsing
 ```
 
-Logs:
-
-```bash
-sudo journalctl -u securevault.service -f
-```
+The service runs under the **virtual service account** `NT SERVICE\SecureVault`,
+which is created automatically and isolated from interactive logins.
 
 ---
 
-## 8. Run Database Migrations
+## 7. Install the IIS reverse proxy
 
-EF Core migrations are applied from the source tree using the
-`dotnet-ef` tool (the published binaries do not include it):
+Install the IIS role + URL Rewrite + ARR 3.0 (the script verifies, doesn't
+install, those prerequisites). Bind a TLS certificate in `LocalMachine\My`,
+then:
 
-```bash
-dotnet tool install --global dotnet-ef --version 8.*
-
-# Run as a user that can read the source tree; the connection string is
-# the same one the service uses.
-ConnectionStrings__Default="Host=127.0.0.1;Port=5432;Database=securevault;Username=securevault_app;Password=<app-password>" \
-  dotnet ef database update \
-  --project src/SecureVault.Infrastructure \
-  --startup-project src/SecureVault.Api
+```powershell
+.\scripts\install-iis-site.ps1 `
+    -CertThumbprint 'A1B2C3...' `
+    -HostName       'vault.example.com'
 ```
 
-Then re-apply `db-setup.sql` so the `REVOKE DELETE, UPDATE ON audit_log`
-block runs against the now-existing table:
+The site listens on `https://vault.example.com`, forwards to
+`http://127.0.0.1:8080`, and injects HSTS, CSP, X-Frame-Options,
+Referrer-Policy, and X-Content-Type-Options on every response.
 
-```bash
-DB_PASSWORD='<app-password>' \
-  sudo -u postgres psql -d securevault -v ON_ERROR_STOP=1 \
-  -f scripts/db-setup.sql
-```
-
-Confirm by checking the NOTICE: it should say `REVOKE DELETE, UPDATE on
-audit_log from securevault_app: done`.
-
-Restart the service so it picks up the schema:
-
-```bash
-sudo systemctl restart securevault.service
-```
+HTTPS-side response compression is disabled (CRIME/BREACH mitigation).
 
 ---
 
-## 9. Configure Nginx (TLS Termination)
+## 8. First-run wizard
 
-Place certificates:
+Browse to `https://vault.example.com/`. The SPA detects the un-initialised
+state and prompts for the Super Admin credentials. Submit; the API:
 
-| File | Description |
-|------|-------------|
-| `/etc/nginx/certs/server.crt` | Certificate (PEM, full chain) |
-| `/etc/nginx/certs/server.key` | Private key (PEM, mode 0600) |
+1. Validates password strength (12 chars, mixed case, digit, symbol).
+2. Creates the Super Admin user with an Argon2id-hashed password.
+3. Creates the root folder.
+4. Writes an `audit_log` row with `action = SystemInitialized`.
 
-For development, generate a self-signed cert:
+After completion, `GET /api/v1/setup/status` returns `410 Gone` and the wizard
+is permanently disabled.
 
-```bash
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
-  -keyout /etc/nginx/certs/server.key \
-  -out    /etc/nginx/certs/server.crt \
-  -subj   "/CN=vault.example.com"
-sudo chmod 600 /etc/nginx/certs/server.key
+---
+
+## 9. Scheduled backups
+
+`scripts/backup.ps1` is idempotent and self-verifying. Schedule it via Task
+Scheduler:
+
+```powershell
+$action    = New-ScheduledTaskAction -Execute 'pwsh.exe' `
+              -Argument '-NoProfile -File "C:\Program Files\SecureVault\scripts\backup.ps1"'
+$trigger   = New-ScheduledTaskTrigger -Daily -At 2am
+$principal = New-ScheduledTaskPrincipal -UserId 'NT SERVICE\SecureVault' -LogonType ServiceAccount
+Register-ScheduledTask -TaskName 'SecureVault Nightly Backup' `
+    -Action $action -Trigger $trigger -Principal $principal -RunLevel Highest
 ```
 
-Install the bundled Nginx config:
+To restore:
 
-```bash
-sudo cp nginx/nginx.conf /etc/nginx/nginx.conf
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-The shipped `nginx.conf` proxies to `http://127.0.0.1:8080` (where the
-systemd service binds Kestrel) and uses `127.0.0.53` (systemd-resolved)
-for OCSP lookups. On distros that use a different stub resolver, edit
-the `resolver` directive in `nginx/nginx.conf`. On Debian/Ubuntu the
-Nginx user is `www-data`; change the `user nginx;` directive at the top
-of the file to match your distro before reloading.
-
-Open the firewall:
-
-```bash
-sudo ufw allow 443/tcp
-sudo ufw allow 80/tcp     # for HTTP→HTTPS redirect only
+```powershell
+Stop-Service SecureVault
+.\scripts\restore.ps1 -BackupFile 'C:\ProgramData\SecureVault\backups\securevault-backup-...svbk'
+Start-Service SecureVault
 ```
 
 ---
 
-## 10. First-Run Initialization
+## 10. Operational notes
 
-The setup endpoint is only available before initialization. It returns
-`410 Gone` once completed.
-
-```bash
-curl -k -X POST https://vault.example.com/api/v1/setup/initialize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "adminUsername": "admin",
-    "adminEmail": "admin@example.com",
-    "adminPassword": "ChangeMe!Securely123"
-  }'
-```
-
-Or browse to `https://vault.example.com` and complete the **First Run
-Setup** form.
-
-> **Important:** Change the super-admin password immediately after first
-> login. Use at least 16 characters.
+- **Service logs:** Serilog writes to `C:\ProgramData\SecureVault\logs\` and to
+  the Windows Event Log (`Application` → source `SecureVault`).
+- **TLS cert renewal:** rebind via `New-WebBinding` and `AddSslCertificate`; no
+  service restart required.
+- **SQL Server backup vs application backup:** they cover different surfaces.
+  The app backup script bundles the MEK with the database — restoring one
+  without the other leaves all ciphertext unreadable.
+- **Audit-log retention:** `RetentionCleanupJob` runs in-process and DELETEs
+  rows older than `Logging:AuditRetentionDays`. The DELETE trigger permits this
+  only when the executing principal is a member of `db_owner`. Grant the app
+  login `db_owner` *only* if you want in-process retention; otherwise schedule
+  a SQL Agent job under a `db_owner` user.
+- **Migrations on upgrade:** generate new migrations with
+  `dotnet ef migrations add <Name>` — the model snapshot is regenerated
+  automatically. Apply on the server with `dotnet ef database update`.
 
 ---
 
-## 11. Verify the Deployment
+## 11. Verifying the install
 
-```bash
-# Service health
-curl -k https://vault.example.com/health
-# Expected: {"status":"Healthy"}
+```powershell
+# 1. Service is Running, Delayed Auto Start
+Get-Service SecureVault | Select Name, Status, StartType
 
-# TLS
-openssl s_client -connect vault.example.com:443 -brief
+# 2. Kestrel listening on loopback only
+Get-NetTCPConnection -LocalPort 8080 | Select LocalAddress, State
 
-# Login smoke test
-curl -k -c cookies.txt -X POST https://vault.example.com/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"ChangeMe!Securely123"}'
-rm cookies.txt
+# 3. IIS binding present
+Get-WebBinding -Name SecureVault
+
+# 4. Database reachable and migrations applied
+sqlcmd -S localhost -d securevault -E -Q "SELECT TOP 5 name FROM sys.tables"
+
+# 5. End-to-end probe
+Invoke-WebRequest "https://vault.example.com/api/v1/setup/status" -UseBasicParsing
 ```
-
----
-
-## 12. Configure Backups
-
-`scripts/backup.sh` produces an AES-256-CTR + HMAC-SHA256 (encrypt-then-MAC)
-archive of the database and MEK file using the passphrase generated in
-step 4.
-
-### Run a manual backup
-
-```bash
-sudo -u securevault \
-  BACKUP_DIR=/var/backups/securevault \
-  DB_HOST=127.0.0.1 DB_USER=postgres \
-  PGPASSWORD='<postgres-superuser-password>' \
-  bash scripts/backup.sh
-```
-
-(Or place a `~securevault/.pgpass` entry instead of `PGPASSWORD`.)
-
-### Schedule with cron
-
-```bash
-sudo crontab -u securevault -e
-# 0 2 * * * /opt/securevault/scripts/backup.sh >> /var/log/securevault/backup.log 2>&1
-```
-
-### Restore
-
-```bash
-sudo systemctl stop securevault.service
-sudo -u postgres bash scripts/restore.sh /var/backups/securevault/securevault-backup-YYYYMMDDTHHMMSSZ.tar.gz.enc
-sudo systemctl start securevault.service
-```
-
-> **Warning:** `restore.sh` drops and recreates the database. It pauses
-> for a 10-second abort window before doing so.
-
----
-
-## 13. LDAP / Active Directory (Optional)
-
-In `/etc/securevault/securevault.env` set:
-
-```
-Auth__Mode=ldap
-Auth__Ldap__Host=ldap.example.com
-Auth__Ldap__Port=636
-Auth__Ldap__UseSsl=true
-Auth__Ldap__BaseDn=dc=example,dc=com
-Auth__Ldap__BindDn=cn=securevault-svc,ou=service-accounts,dc=example,dc=com
-Auth__Ldap__BindPassword=<service-account-password>
-Auth__Ldap__UserSearchFilter=(sAMAccountName={0})
-```
-
-Then `sudo systemctl restart securevault.service`.
-
----
-
-## 14. Local Development Setup
-
-```bash
-# Backend
-dotnet --version            # must be 8.0.404
-dotnet restore --use-lock-file
-dotnet build --configuration Release
-dotnet run --project src/SecureVault.Api/SecureVault.Api.csproj
-# API listens on http://localhost:5000
-
-# Frontend
-cd frontend
-npm ci
-npm run dev                 # Vite dev server at http://localhost:5173
-
-# Tests (unit only — no Docker required)
-dotnet test src/SecureVault.Tests/SecureVault.Tests.csproj \
-  --filter "Category!=Integration&Category!=Security" \
-  --collect:"XPlat Code Coverage"
-
-# Frontend type check + lint
-cd frontend && npm run type-check && npm run lint
-```
-
-> The integration and security test suites use **Testcontainers** and
-> still require a Docker daemon to run. They cannot run on a Docker-less
-> host without modification.
-
----
-
-## 15. Upgrading
-
-```bash
-git pull origin main
-
-# Rebuild
-cd frontend && npm ci && npm run build && cd ..
-dotnet publish src/SecureVault.Api/SecureVault.Api.csproj -c Release -o ./publish --no-restore
-mkdir -p ./publish/wwwroot && cp -r frontend/dist/* ./publish/wwwroot/
-
-# Stop, install, migrate, restart
-sudo systemctl stop securevault.service
-sudo rsync -a --delete ./publish/ /opt/securevault/
-sudo chown -R securevault:securevault /opt/securevault
-sudo chmod -R a-w /opt/securevault
-
-ConnectionStrings__Default="..." dotnet ef database update \
-  --project src/SecureVault.Infrastructure \
-  --startup-project src/SecureVault.Api
-
-sudo systemctl start securevault.service
-```
-
----
-
-## 16. Uninstalling
-
-```bash
-sudo systemctl disable --now securevault.service
-sudo rm /etc/systemd/system/securevault.service
-sudo systemctl daemon-reload
-
-sudo -u postgres dropdb securevault
-sudo -u postgres psql -c "DROP ROLE IF EXISTS securevault_app;"
-
-sudo rm -rf /opt/securevault /var/log/securevault /var/lib/securevault
-# IRREVERSIBLE — make sure backups exist before removing secrets
-sudo rm -rf /etc/securevault
-
-sudo userdel securevault
-```
-
-> **Warning:** Removing `/etc/securevault/secrets/securevault-mek`
-> without a backup makes all encrypted secrets permanently unrecoverable.

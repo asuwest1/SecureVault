@@ -29,8 +29,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.10" />
     <!-- In-memory provider for fast unit tests -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.10" />
-    <!-- Testcontainers for real PostgreSQL -->
-    <PackageReference Include="Testcontainers.PostgreSql" Version="3.10.0" />
+    <!-- Testcontainers for real Microsoft SQL Server -->
+    <PackageReference Include="Testcontainers.MsSql" Version="3.10.0" />
     <!-- Coverage -->
     <PackageReference Include="coverlet.collector" Version="6.0.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

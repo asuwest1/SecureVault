@@ -13,7 +13,7 @@ public class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 
         builder.Property(ur => ur.UserId).HasColumnName("user_id");
         builder.Property(ur => ur.RoleId).HasColumnName("role_id");
-        builder.Property(ur => ur.AssignedAt).HasColumnName("assigned_at").HasDefaultValueSql("NOW()");
+        builder.Property(ur => ur.AssignedAt).HasColumnName("assigned_at").HasDefaultValueSql("SYSUTCDATETIME()");
 
         builder.HasOne(ur => ur.User)
             .WithMany(u => u.UserRoles)

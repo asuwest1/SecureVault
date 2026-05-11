@@ -14,7 +14,7 @@ public class FolderAclConfiguration : IEntityTypeConfiguration<FolderAcl>
         builder.Property(fa => fa.FolderId).HasColumnName("folder_id");
         builder.Property(fa => fa.RoleId).HasColumnName("role_id");
         builder.Property(fa => fa.Permissions).HasColumnName("permissions").HasConversion<int>();
-        builder.Property(fa => fa.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("NOW()");
+        builder.Property(fa => fa.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("SYSUTCDATETIME()");
 
         builder.HasOne(fa => fa.Folder)
             .WithMany(f => f.FolderAcls)

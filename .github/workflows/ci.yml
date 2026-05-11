@@ -121,7 +121,7 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
-      - name: Run integration tests (real PostgreSQL via Testcontainers)
+      - name: Run integration tests (real SQL Server via Testcontainers)
         run: |
           dotnet test src/SecureVault.Tests/SecureVault.Tests.csproj \
             --no-build -c Release \
@@ -158,52 +158,50 @@ jobs:
           sarif_file: "trivy-results.sarif"
 
   # ─────────────────────────────────────────────────────────────────────────
-  # Docker build + cosign sign (main branch only)
+  # Publish artifact (main branch only): zipped .NET publish output + SPA.
+  # The Windows Server install path consumes this artifact directly — no
+  # production container image is built.
   # ─────────────────────────────────────────────────────────────────────────
-  docker-build-push:
-    name: Docker Build & Push
+  publish-artifact:
+    name: Publish Release Artifact
     runs-on: ubuntu-latest
     needs: [frontend, dotnet-build, trivy-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          dotnet-version: "8.0.x"
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Build and push Docker image
-        id: build-push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Sign image with cosign (keyless via GitHub OIDC)
+      - name: Build frontend bundle
+        working-directory: frontend
         run: |
-          cosign sign --yes \
-            ghcr.io/${{ github.repository }}@${{ steps.build-push.outputs.digest }}
-        env:
-          COSIGN_EXPERIMENTAL: "1"
+          npm ci
+          npm run build
+
+      - name: Publish API (win-x64, self-contained=false)
+        run: |
+          dotnet publish src/SecureVault.Api/SecureVault.Api.csproj \
+            -c Release -r win-x64 --no-self-contained \
+            -o ./publish
+          cp -r frontend/dist/* ./publish/wwwroot/
+
+      - name: Zip release bundle
+        run: |
+          cd publish && zip -r ../securevault-${{ github.sha }}.zip . && cd ..
+
+      - name: Upload as GitHub Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: securevault-release
+          path: securevault-${{ github.sha }}.zip
+          retention-days: 30
