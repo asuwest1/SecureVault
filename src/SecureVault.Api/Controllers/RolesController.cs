@@ -118,9 +118,15 @@ public class RolesController : ControllerBase
     public async Task<IActionResult> SetSecretAcl(
         Guid id, [FromBody] SetSecretAclRequest request, CancellationToken ct)
     {
+        if ((request.Permissions & ~SecretPermission.Full) != 0)
+            return BadRequest(new { error = "Invalid permission mask." });
+
+        if (!await _db.Roles.AnyAsync(r => r.Id == id, ct))
+            return NotFound(new { error = "Role not found." });
+
         // Verify the secret exists
         if (!await _db.Secrets.AnyAsync(s => s.Id == request.SecretId, ct))
-            return NotFound();
+            return NotFound(new { error = "Secret not found." });
 
         var existing = await _db.SecretAcls
             .FirstOrDefaultAsync(sa => sa.SecretId == request.SecretId && sa.RoleId == id, ct);

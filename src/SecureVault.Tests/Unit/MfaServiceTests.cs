@@ -85,7 +85,7 @@ public class MfaServiceTests
         }
 
         public byte[] GenerateDek() => throw new NotSupportedException();
-        public (byte[] ciphertextWithTag, byte[] nonce) Encrypt(byte[] plaintext, byte[] key) => throw new NotSupportedException();
+        public (byte[] ciphertext, byte[] nonce) Encrypt(byte[] plaintext, byte[] key) => throw new NotSupportedException();
         public byte[] Decrypt(byte[] ciphertextWithTag, byte[] nonce, byte[] key) => throw new NotSupportedException();
         public byte[] WrapDek(byte[] dek) => throw new NotSupportedException();
         public byte[] WrapDek(byte[] dek, byte[] mek) => throw new NotSupportedException();

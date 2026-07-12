@@ -15,7 +15,7 @@ namespace SecureVault.Api.Services;
 /// </summary>
 public class FirstRunService
 {
-    private readonly SemaphoreSlim _lock = new(1, 1);
+    private static readonly SemaphoreSlim InitializationLock = new(1, 1);
 
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
     private readonly IEncryptionService _encryption;
@@ -46,10 +46,20 @@ public class FirstRunService
         string adminPassword,
         CancellationToken ct = default)
     {
-        await _lock.WaitAsync(ct);
+        await InitializationLock.WaitAsync(ct);
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+            // Serialize setup across every application instance. The static semaphore
+            // handles this process; sp_getapplock covers other processes or servers.
+            await db.Database.ExecuteSqlRawAsync(
+                "DECLARE @result int; " +
+                "EXEC @result = sp_getapplock @Resource = N'SecureVault.FirstRun', " +
+                "@LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 15000; " +
+                "IF @result < 0 THROW 51000, 'Unable to acquire initialization lock.', 1;",
+                ct);
 
             // Double-check inside lock
             if (await db.Users.AnyAsync(u => u.IsSuperAdmin, ct))
@@ -89,6 +99,7 @@ public class FirstRunService
             db.Folders.Add(rootFolder);
 
             await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
 
             // Audit system initialization
             await _audit.LogAsync(
@@ -104,7 +115,7 @@ public class FirstRunService
         }
         finally
         {
-            _lock.Release();
+            InitializationLock.Release();
         }
     }
 

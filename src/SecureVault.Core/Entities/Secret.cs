@@ -10,7 +10,16 @@ public class Secret
     public string? Url { get; set; }
     public string? Notes { get; set; }
     public SecretType Type { get; set; }
-    public string[] Tags { get; set; } = Array.Empty<string>();
+    public string TagsSerialized { get; set; } = string.Empty;
+    public string[] Tags
+    {
+        get => string.IsNullOrEmpty(TagsSerialized)
+            ? Array.Empty<string>()
+            : TagsSerialized.Split('\u001f', StringSplitOptions.RemoveEmptyEntries);
+        set => TagsSerialized = value == null || value.Length == 0
+            ? string.Empty
+            : string.Join('\u001f', value);
+    }
 
     // Encrypted fields — always byte[], never string
     public byte[] ValueEnc { get; set; } = Array.Empty<byte>();

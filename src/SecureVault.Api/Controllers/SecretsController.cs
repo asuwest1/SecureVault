@@ -42,6 +42,9 @@ public class SecretsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] SearchSecretsRequest request, CancellationToken ct)
     {
+        if (!TryValidateTags(request.Tags, out var tagError))
+            return BadRequest(new { error = tagError });
+
         var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
@@ -54,8 +57,9 @@ public class SecretsController : ControllerBase
         }
 
         if (!string.IsNullOrWhiteSpace(request.Query))
-            query = query.Where(s => EF.Functions.ToTsVector("english", s.Name + " " + (s.Notes ?? ""))
-                .Matches(EF.Functions.PlainToTsQuery("english", request.Query)));
+            query = query.Where(s => s.Name.Contains(request.Query) ||
+                (s.Username != null && s.Username.Contains(request.Query)) ||
+                (s.Notes != null && s.Notes.Contains(request.Query)));
 
         if (request.Type.HasValue)
             query = query.Where(s => s.Type == request.Type.Value);
@@ -63,18 +67,38 @@ public class SecretsController : ControllerBase
         if (request.FolderId.HasValue)
             query = query.Where(s => s.FolderId == request.FolderId.Value);
 
+        if (request.Tags is { Length: > 0 })
+        {
+            foreach (var requestedTag in request.Tags.Where(t => !string.IsNullOrWhiteSpace(t)).Distinct())
+            {
+                var tag = requestedTag.Trim();
+                var prefix = tag + '\u001f';
+                var suffix = "\u001f" + tag;
+                var middle = "\u001f" + tag + '\u001f';
+                query = query.Where(s => s.TagsSerialized == tag ||
+                    s.TagsSerialized.StartsWith(prefix) ||
+                    s.TagsSerialized.EndsWith(suffix) ||
+                    s.TagsSerialized.Contains(middle));
+            }
+        }
+
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, MaxPageSize);
 
         var total = await query.CountAsync(ct);
-        var items = await query
+        var rows = await query
             .OrderBy(s => s.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(s => new SecretSummaryResponse(
-                s.Id, s.Name, s.Type, s.FolderId, s.Username, s.Url, s.Tags,
-                s.CreatedAt, s.UpdatedAt))
+            .Select(s => new
+            {
+                s.Id, s.Name, s.Type, s.FolderId, s.Username, s.Url,
+                s.TagsSerialized, s.CreatedAt, s.UpdatedAt
+            })
             .ToListAsync(ct);
+        var items = rows.Select(s => new SecretSummaryResponse(
+            s.Id, s.Name, s.Type, s.FolderId, s.Username, s.Url,
+            DeserializeTags(s.TagsSerialized), s.CreatedAt, s.UpdatedAt)).ToList();
 
         return Ok(new PagedResponse<SecretSummaryResponse>(items, page, pageSize, total));
     }
@@ -140,6 +164,9 @@ public class SecretsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateSecretRequest request, CancellationToken ct)
     {
+        if (!TryValidateTags(request.Tags, out var tagError))
+            return BadRequest(new { error = tagError });
+
         var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
         var username = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -208,6 +235,9 @@ public class SecretsController : ControllerBase
     [RequireSecretPermission(SecretPermission.Change)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSecretRequest request, CancellationToken ct)
     {
+        if (!TryValidateTags(request.Tags, out var tagError))
+            return BadRequest(new { error = tagError });
+
         var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
         var username = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -356,5 +386,27 @@ public class SecretsController : ControllerBase
         var roleIds = User.FindAll("role_ids").Select(c => Guid.Parse(c.Value)).ToList();
         var isSuperAdmin = bool.Parse(User.FindFirstValue("is_super_admin") ?? "false");
         return (userId, roleIds, isSuperAdmin);
+    }
+
+    private static string[] DeserializeTags(string value) =>
+        string.IsNullOrEmpty(value)
+            ? Array.Empty<string>()
+            : value.Split('\u001f', StringSplitOptions.RemoveEmptyEntries);
+
+    private static bool TryValidateTags(string[]? tags, out string? error)
+    {
+        error = null;
+        if (tags == null) return true;
+        if (tags.Any(t => t.Contains('\u001f')))
+        {
+            error = "Tags may not contain the unit-separator character.";
+            return false;
+        }
+        if (string.Join('\u001f', tags).Length > 2048)
+        {
+            error = "Combined tag length may not exceed 2048 characters.";
+            return false;
+        }
+        return true;
     }
 }

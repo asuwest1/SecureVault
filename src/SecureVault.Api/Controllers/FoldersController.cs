@@ -39,11 +39,18 @@ public class FoldersController : ControllerBase
 
         var folders = await _db.Folders
             .AsNoTracking()
-            .Where(f => f.ParentFolderId == null && accessibleIds.Contains(f.Id))
-            .Include(f => f.Children)
+            .Where(f => accessibleIds.Contains(f.Id))
             .ToListAsync(ct);
 
-        return Ok(folders.Select(f => MapFolderFiltered(f, accessibleIds)));
+        var childrenByParent = folders
+            .Where(f => f.ParentFolderId.HasValue)
+            .GroupBy(f => f.ParentFolderId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(f => f.Name).ToList());
+
+        return Ok(folders
+            .Where(f => f.ParentFolderId == null)
+            .OrderBy(f => f.Name)
+            .Select(f => MapFolderTree(f, childrenByParent)));
     }
 
     [HttpGet("{id:guid}")]
@@ -51,20 +58,23 @@ public class FoldersController : ControllerBase
     {
         var (userId, roleIds, isSuperAdmin) = GetCallerInfo();
 
-        if (!isSuperAdmin)
-        {
-            var accessibleIds = await _permissions.GetAccessibleFolderIdsAsync(userId, roleIds, false, ct);
-            if (!accessibleIds.Contains(id))
-                return NotFound();
-        }
+        var permission = await _permissions.GetFolderPermissionAsync(userId, roleIds, isSuperAdmin, id, ct);
+        if (permission == null) return NotFound();
 
-        var folder = await _db.Folders
+        var accessibleIds = await _permissions.GetAccessibleFolderIdsAsync(userId, roleIds, isSuperAdmin, ct);
+
+        var folders = await _db.Folders
             .AsNoTracking()
-            .Include(f => f.Children)
-            .FirstOrDefaultAsync(f => f.Id == id, ct);
+            .Where(f => accessibleIds.Contains(f.Id))
+            .ToListAsync(ct);
 
+        var folder = folders.FirstOrDefault(f => f.Id == id);
         if (folder == null) return NotFound();
-        return Ok(MapFolder(folder));
+        var childrenByParent = folders
+            .Where(f => f.ParentFolderId.HasValue)
+            .GroupBy(f => f.ParentFolderId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(f => f.Name).ToList());
+        return Ok(MapFolderTree(folder, childrenByParent));
     }
 
     [HttpPost]
@@ -156,6 +166,29 @@ public class FoldersController : ControllerBase
         var folder = await _db.Folders.FindAsync([id], ct);
         if (folder == null) return NotFound();
 
+        var allFolders = await _db.Folders
+            .AsNoTracking()
+            .Select(f => new { f.Id, f.ParentFolderId })
+            .ToListAsync(ct);
+        var folderIds = new HashSet<Guid> { id };
+        var pending = new Queue<Guid>();
+        pending.Enqueue(id);
+        while (pending.TryDequeue(out var parentId))
+        {
+            foreach (var childId in allFolders
+                .Where(f => f.ParentFolderId == parentId)
+                .Select(f => f.Id))
+            {
+                if (folderIds.Add(childId)) pending.Enqueue(childId);
+            }
+        }
+
+        var containsSecrets = await _db.Secrets
+            .IgnoreQueryFilters()
+            .AnyAsync(s => folderIds.Contains(s.FolderId), ct);
+        if (containsSecrets)
+            return Conflict(new { error = "Folder or one of its descendants contains secrets." });
+
         _db.Folders.Remove(folder);
         await _db.SaveChangesAsync(ct);
 
@@ -169,6 +202,13 @@ public class FoldersController : ControllerBase
     [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> SetAcl(Guid id, [FromBody] SetFolderAclRequest request, CancellationToken ct)
     {
+        if (!IsValidPermissionMask(request.Permissions))
+            return BadRequest(new { error = "Invalid permission mask." });
+        if (!await _db.Folders.AnyAsync(f => f.Id == id, ct))
+            return NotFound(new { error = "Folder not found." });
+        if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct))
+            return NotFound(new { error = "Role not found." });
+
         var existing = await _db.FolderAcls
             .FirstOrDefaultAsync(fa => fa.FolderId == id && fa.RoleId == request.RoleId, ct);
 
@@ -204,11 +244,15 @@ public class FoldersController : ControllerBase
         new(f.Id, f.Name, f.ParentFolderId, f.Depth, f.CreatedAt,
             f.Children?.Select(MapFolder).ToList() ?? []);
 
-    /// <summary>Only includes children the user has permission to see.</summary>
-    private static FolderResponse MapFolderFiltered(Folder f, IReadOnlySet<Guid> accessibleIds) =>
+    private static FolderResponse MapFolderTree(
+        Folder f, IReadOnlyDictionary<Guid, List<Folder>> childrenByParent) =>
         new(f.Id, f.Name, f.ParentFolderId, f.Depth, f.CreatedAt,
-            f.Children?.Where(c => accessibleIds.Contains(c.Id))
-                .Select(c => MapFolderFiltered(c, accessibleIds)).ToList() ?? []);
+            childrenByParent.TryGetValue(f.Id, out var children)
+                ? children.Select(c => MapFolderTree(c, childrenByParent)).ToList()
+                : []);
+
+    private static bool IsValidPermissionMask(SecretPermission permissions) =>
+        (permissions & ~SecretPermission.Full) == 0;
 
     private (Guid userId, List<Guid> roleIds, bool isSuperAdmin) GetCallerInfo()
     {

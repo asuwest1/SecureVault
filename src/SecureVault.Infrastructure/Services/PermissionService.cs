@@ -275,7 +275,38 @@ public class PermissionService : IPermissionService
         var roleIdList = roleIds.ToList();
         if (roleIdList.Count == 0) return new HashSet<Guid>();
 
-        // Folders with direct ACL plus all ancestor folders (for tree rendering).
+        if (!db.Database.IsRelational())
+        {
+            var directIds = await db.FolderAcls
+                .AsNoTracking()
+                .Where(a => roleIdList.Contains(a.RoleId) && a.Permissions != SecretPermission.None)
+                .Select(a => a.FolderId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            var folders = await db.Folders
+                .AsNoTracking()
+                .Select(f => new { f.Id, f.ParentFolderId })
+                .ToListAsync(cancellationToken);
+            var result = directIds.ToHashSet();
+
+            var descendantQueue = new Queue<Guid>(directIds);
+            while (descendantQueue.TryDequeue(out var parentId))
+            {
+                foreach (var child in folders.Where(f => f.ParentFolderId == parentId))
+                    if (result.Add(child.Id)) descendantQueue.Enqueue(child.Id);
+            }
+
+            foreach (var directId in directIds)
+            {
+                var current = folders.FirstOrDefault(f => f.Id == directId)?.ParentFolderId;
+                while (current.HasValue && result.Add(current.Value))
+                    current = folders.FirstOrDefault(f => f.Id == current.Value)?.ParentFolderId;
+            }
+
+            return result;
+        }
+
+        // Include inherited descendants and ancestors needed for tree rendering.
         var roleInClause = BuildRoleInClause(roleIdList.Count, startIndex: 0);
         var sql = $@"
             WITH acl_folders AS (
@@ -292,8 +323,19 @@ public class PermissionService : IPermissionService
                 SELECT f.id, f.parent_folder_id
                 FROM folders f
                 JOIN ancestors a ON a.parent_folder_id = f.id
+            ),
+            descendants AS (
+                SELECT f.id, f.parent_folder_id
+                FROM folders f
+                WHERE f.id IN (SELECT id FROM acl_folders)
+                UNION ALL
+                SELECT f.id, f.parent_folder_id
+                FROM folders f
+                JOIN descendants d ON f.parent_folder_id = d.id
             )
             SELECT DISTINCT id AS Value FROM ancestors
+            UNION
+            SELECT DISTINCT id AS Value FROM descendants
         ";
 
         var args = BuildArgs(null, roleIdList);

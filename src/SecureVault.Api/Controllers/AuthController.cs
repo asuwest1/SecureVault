@@ -113,11 +113,6 @@ public class AuthController : ControllerBase
         }
 
         // Success — reset failed attempts
-        user.FailedAttempts = 0;
-        user.LockedUntil = null;
-        user.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
-
         var roleIds = user.UserRoles.Select(ur => ur.RoleId).ToList();
 
         // MFA required
@@ -128,6 +123,11 @@ public class AuthController : ControllerBase
                 detail: new Dictionary<string, object?> { ["mfa_required"] = true });
             return Ok(new LoginResponse(string.Empty, DateTimeOffset.UtcNow, MfaRequired: true, MfaToken: mfaToken));
         }
+
+        user.FailedAttempts = 0;
+        user.LockedUntil = null;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
 
         return await IssueTokensAsync(user, roleIds, ip, ct);
     }
@@ -150,6 +150,13 @@ public class AuthController : ControllerBase
 
         if (user == null || !user.IsActive || !user.MfaEnabled || user.MfaSecretEnc == null)
             return Unauthorized(new { error = "Invalid MFA challenge token." });
+
+        if (user.LockedUntil.HasValue && user.LockedUntil > DateTimeOffset.UtcNow)
+        {
+            await _audit.LogAsync(AuditAction.AuthLoginFailed, user.Id, user.Username,
+                ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
+            return Unauthorized(new { error = "Invalid MFA code." });
+        }
 
         if (!_mfa.Verify(user.MfaSecretEnc, request.Code))
         {

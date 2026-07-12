@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SecureVault.Core.Entities;
 using SecureVault.Core.Enums;
@@ -27,17 +26,12 @@ public class SecretConfiguration : IEntityTypeConfiguration<Secret>
 
         // Tags: SQL Server has no native array type. Store as a unit-separator (U+001F) delimited
         // string in nvarchar(2048). Tag values may not contain the delimiter (enforced at the API layer).
-        builder.Property(s => s.Tags)
+        builder.Ignore(s => s.Tags);
+        builder.Property(s => s.TagsSerialized)
             .HasColumnName("tags")
             .HasColumnType("nvarchar(2048)")
-            .IsRequired()
-            .HasConversion(
-                v => v == null || v.Length == 0 ? string.Empty : string.Join('', v),
-                v => string.IsNullOrEmpty(v) ? Array.Empty<string>() : v.Split('', StringSplitOptions.RemoveEmptyEntries),
-                new ValueComparer<string[]>(
-                    (a, b) => (a ?? Array.Empty<string>()).SequenceEqual(b ?? Array.Empty<string>()),
-                    a => a == null ? 0 : a.Aggregate(0, (h, x) => HashCode.Combine(h, x.GetHashCode())),
-                    a => a == null ? Array.Empty<string>() : a.ToArray()));
+            .HasMaxLength(2048)
+            .IsRequired();
 
         builder.Property(s => s.FolderId).HasColumnName("folder_id").IsRequired();
         builder.Property(s => s.CreatedByUserId).HasColumnName("created_by_user_id").IsRequired();
