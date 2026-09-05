@@ -58,3 +58,21 @@ test('invalid credentials do not refresh or retry login', async () => {
   await assert.rejects(apiRequest('/auth/login', { method: 'POST' }))
   assert.equal(calls, 1)
 })
+
+test('same-user permission changes invalidate cached data', () => {
+  useAuthStore.getState().setAuth(token('a'), payload('a'))
+  queryClient.setQueryData(['secret', 'id'], { notes: 'private' })
+  useAuthStore.getState().setAuth(token('a'), { ...payload('a'), security_version: 'new-session' })
+  assert.equal(queryClient.getQueryData(['secret', 'id']), undefined)
+})
+
+test('refresh into a different account never replays the original mutation', async () => {
+  useAuthStore.getState().setAuth(token('a'), payload('a'))
+  let calls = 0
+  global.fetch = async () => {
+    calls++
+    return calls === 1 ? new Response('{}', { status: 401 }) : new Response(JSON.stringify({ accessToken: token('b') }))
+  }
+  await assert.rejects(apiRequest('/secrets/id', { method: 'DELETE' }), { name: 'AbortError' })
+  assert.equal(calls, 2)
+})

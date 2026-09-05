@@ -200,7 +200,7 @@ namespace SecureVault.Infrastructure.Data.Migrations
                     name = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
                     username = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
                     url = table.Column<string>(type: "nvarchar(2048)", maxLength: 2048, nullable: true),
-                    notes = table.Column<string>(type: "nvarchar(4096)", maxLength: 4096, nullable: true),
+                    notes = table.Column<string>(type: "nvarchar(max)", maxLength: 4096, nullable: true),
                     type = table.Column<int>(type: "int", nullable: false),
                     tags = table.Column<string>(type: "nvarchar(2048)", nullable: false, defaultValue: ""),
                     value_enc = table.Column<byte[]>(type: "varbinary(max)", nullable: false),

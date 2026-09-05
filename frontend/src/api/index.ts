@@ -69,7 +69,7 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const { accessToken } = useAuthStore.getState()
+  const { accessToken, userId } = useAuthStore.getState()
   const signal = sessionSignal()
 
   const headers: HeadersInit = {
@@ -92,7 +92,8 @@ export async function apiRequest<T>(
     const refreshed = await silentRefresh()
     if (!refreshed) throw new ApiError(401, 'Session expired. Please log in again.')
 
-    const { accessToken: newToken } = useAuthStore.getState()
+    const { accessToken: newToken, userId: refreshedUserId } = useAuthStore.getState()
+    if (userId && userId !== refreshedUserId) throw new DOMException('Account changed', 'AbortError')
     const retryResponse = await fetch(`${API_BASE}${path}`, {
       ...options,
       signal: sessionSignal(),
@@ -276,17 +277,22 @@ export const auditApi = {
    * <a href> cannot attach the token, so the server would reject it with 401.
    */
   downloadCsv: async (filename = 'audit-log.csv'): Promise<void> => {
-    const { accessToken } = useAuthStore.getState()
+    const { accessToken, userId } = useAuthStore.getState()
+    const signal = sessionSignal()
     const res = await fetch(`${API_BASE}/audit/export`, {
+      signal,
       credentials: 'include',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     })
 
+    if (signal.aborted) throw new DOMException('Session changed', 'AbortError')
     if (res.status === 401) {
       const refreshed = await silentRefresh()
       if (!refreshed) throw new ApiError(401, 'Session expired. Please log in again.')
-      const { accessToken: newToken } = useAuthStore.getState()
+      const { accessToken: newToken, userId: refreshedUserId } = useAuthStore.getState()
+      if (userId !== refreshedUserId) throw new DOMException('Account changed', 'AbortError')
       const retry = await fetch(`${API_BASE}/audit/export`, {
+        signal: sessionSignal(),
         credentials: 'include',
         headers: newToken ? { Authorization: `Bearer ${newToken}` } : {},
       })

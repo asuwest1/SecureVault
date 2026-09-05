@@ -6,28 +6,28 @@ namespace SecureVault.Api.Models.Requests;
 public record CreateSecretRequest(
     [Required, StringLength(255)] string Name,
     [Required] string Value,
-    SecretType Type,
+    [EnumDataType(typeof(SecretType))] SecretType Type,
     Guid FolderId,
-    string? Username = null,
-    string? Url = null,
-    string? Notes = null,
+    [StringLength(255)] string? Username = null,
+    [StringLength(2048)] string? Url = null,
+    [StringLength(4096)] string? Notes = null,
     string[]? Tags = null
 );
 
 public record UpdateSecretRequest(
     [StringLength(255)] string? Name = null,
     string? Value = null,
-    SecretType? Type = null,
+    [EnumDataType(typeof(SecretType))] SecretType? Type = null,
     Guid? FolderId = null,
-    string? Username = null,
-    string? Url = null,
-    string? Notes = null,
+    [StringLength(255)] string? Username = null,
+    [StringLength(2048)] string? Url = null,
+    [StringLength(4096)] string? Notes = null,
     string[]? Tags = null
 );
 
 public record SearchSecretsRequest(
     string? Query = null,
-    SecretType? Type = null,
+    [EnumDataType(typeof(SecretType))] SecretType? Type = null,
     string[]? Tags = null,
     Guid? FolderId = null,
     [Range(1, int.MaxValue)] int Page = 1,
