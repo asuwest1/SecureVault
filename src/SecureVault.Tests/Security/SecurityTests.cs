@@ -184,7 +184,9 @@ public class SecurityTests : IAsyncLifetime
         var user = await db.Users.SingleAsync(u => u.Id == id);
         var service = scope.ServiceProvider.GetRequiredService<TokenService>();
         var (userToken, _) = service.GenerateAccessToken(user, []);
+        var (refresh, _) = await service.GenerateRefreshTokenAsync(user.Id, securityVersion: user.SecurityVersion);
         (await Client.PutAsJsonAsync($"/api/v1/users/{id}", new { IsActive = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await service.ValidateRefreshTokenAsync(refresh)).Should().BeNull();
         Client.DefaultRequestHeaders.Authorization = new("Bearer", userToken);
         (await Client.GetAsync($"/api/v1/users/{id}")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }

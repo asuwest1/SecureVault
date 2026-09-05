@@ -282,6 +282,8 @@ public class AuthController : ControllerBase
     private async Task<IActionResult> IssueTokensAsync(
         Core.Entities.User user, List<Guid> roleIds, string? ip, CancellationToken ct)
     {
+        await _audit.LogAsync(AuditAction.AuthLogin, user.Id, user.Username, ipAddress: ip);
+
         var (accessToken, accessExpiresAt) = _tokens.GenerateAccessToken(user, roleIds);
         var (refreshToken, refreshExpiresAt) = await _tokens.GenerateRefreshTokenAsync(user.Id, ct, user.SecurityVersion);
 
@@ -295,7 +297,6 @@ public class AuthController : ControllerBase
             Expires = refreshExpiresAt.UtcDateTime
         });
 
-        await _audit.LogAsync(AuditAction.AuthLogin, user.Id, user.Username, ipAddress: ip);
 
         return Ok(new LoginResponse(accessToken, accessExpiresAt));
     }

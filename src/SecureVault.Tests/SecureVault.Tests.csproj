@@ -29,6 +29,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.10" />
     <!-- In-memory provider for fast unit tests -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.10" />
+    <!-- Patched transitive dependency of the Testcontainers Docker client. -->
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <!-- Testcontainers for real Microsoft SQL Server -->
     <PackageReference Include="Testcontainers.MsSql" Version="3.10.0" />
     <!-- Coverage -->
