@@ -70,9 +70,15 @@ If your account has MFA enabled:
 
 ### Enrolling MFA (if not yet enabled)
 
-Contact your administrator to enable MFA enrollment for your account. Once enabled, you will be prompted to scan a QR code on next login.
+1. Open **Account security** from the vault sidebar.
+2. Select **Set up MFA**.
+3. Add a time-based account manually in your authenticator using the displayed setup key.
+4. Enter its current six-digit code and select **Enable MFA**.
 
-> **Tip:** Store your TOTP backup codes in a secure location separate from SecureVault.
+The current session remains signed in; other browser sessions are invalidated.
+MFA is enabled only after the code is verified.
+
+> Store a recovery copy of the setup key securely outside SecureVault. Separate one-time recovery codes are not implemented.
 
 ---
 
@@ -241,24 +247,23 @@ API tokens allow non-interactive access to SecureVault (e.g., for CI/CD pipeline
 
 ### Create an API Token
 
-1. Go to your **Profile** (click your username in the top-right corner).
-2. Under **API Tokens**, click **+ New Token**.
-3. Enter a description (e.g., `ci-pipeline-prod`) and an optional expiry date.
-4. Click **Create**.
-5. **Copy the token now** — it is shown only once and cannot be retrieved later.
+Create tokens through `POST /api/v1/users/{userId}/api-tokens`, authenticated
+with a completed-login access token. Send `{ "name": "ci-pipeline-prod", "expiresAt": "2026-12-31T00:00:00Z" }`.
+The expiry is optional but recommended. Copy the returned `token` immediately;
+it is not returned by the token-list endpoint. API tokens cannot mint new tokens.
 
 ### Use an API Token
 
-Pass the token as a Bearer token in the `Authorization` header:
+Pass the token in the `X-Api-Token` header:
 
 ```bash
-curl -H "Authorization: Bearer <your-token>" \
+curl -H "X-Api-Token: <your-token>" \
      https://vault.example.com/api/v1/secrets
 ```
 
 ### Revoke an API Token
 
-1. Go to your **Profile → API Tokens**.
+1. Open **Account security → API tokens** from the vault sidebar.
 2. Click **Revoke** next to the token.
 
 > **Security note:** Treat API tokens like passwords. Store them in your CI/CD platform's secrets store, not in source code.
@@ -373,7 +378,7 @@ Follow these guidelines to use SecureVault safely:
 
 **Accounts and Passwords**
 - Use a strong, unique password for your SecureVault account (16+ characters, mixed character types).
-- Enable MFA on your account and store backup codes securely.
+- Enable MFA on your account and store a recovery copy of the setup key securely.
 - Never share your credentials with colleagues; create separate accounts for each person.
 
 **Secrets**

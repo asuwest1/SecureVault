@@ -8,6 +8,7 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+    public DbSet<SystemState> SystemStates => Set<SystemState>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
@@ -23,6 +24,13 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<SystemState>(b =>
+        {
+            b.ToTable("system_state");
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Id).HasColumnName("id").ValueGeneratedNever();
+            b.Property(s => s.IsInitialized).HasColumnName("is_initialized");
+        });
 
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());

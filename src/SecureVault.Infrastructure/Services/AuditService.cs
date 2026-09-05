@@ -8,21 +8,21 @@ using SecureVault.Infrastructure.Data;
 namespace SecureVault.Infrastructure.Services;
 
 /// <summary>
-/// Append-only audit service. Uses a separate DbContext instance so that
-/// business transaction rollbacks do NOT roll back audit entries.
+/// Append-only audit service. Saves pending business changes and their audit entry
+/// together; audit persistence failures prevent sensitive operations from succeeding.
 /// </summary>
 public class AuditService : IAuditService
 {
-    private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly AppDbContext _db;
     private readonly SyslogForwarder _syslog;
     private readonly ILogger<AuditService> _logger;
 
     public AuditService(
-        IDbContextFactory<AppDbContext> dbFactory,
+        AppDbContext db,
         SyslogForwarder syslog,
         ILogger<AuditService> logger)
     {
-        _dbFactory = dbFactory;
+        _db = db;
         _syslog = syslog;
         _logger = logger;
     }
@@ -51,18 +51,18 @@ public class AuditService : IAuditService
 
         try
         {
-            // Separate DbContext instance — isolated from business transaction
-            await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-            db.AuditLogs.Add(entry);
-            await db.SaveChangesAsync(cancellationToken);
+            // EF saves the pending business changes and audit insert in one transaction.
+            _db.AuditLogs.Add(entry);
+            await _db.SaveChangesAsync(cancellationToken);
 
             // Fire-and-forget syslog — unavailability must not block request
             _syslog.Forward(entry);
         }
         catch (Exception ex)
         {
-            // Audit failure: log error but do NOT propagate — caller still completes its operation
+            // Fail closed; callers must not disclose secrets after audit failure.
             _logger.LogError(ex, "Failed to write audit log entry for action {Action}", action);
+            throw;
         }
     }
 }

@@ -67,7 +67,6 @@ public class RolesController : ControllerBase
         };
 
         _db.Roles.Add(role);
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.RoleCreated, callerId, User.FindFirstValue(ClaimTypes.Name),
             "Role", role.Id, HttpContext.Connection.RemoteIpAddress?.ToString());
@@ -85,7 +84,6 @@ public class RolesController : ControllerBase
 
         if (request.Name != null) role.Name = request.Name;
         if (request.Description != null) role.Description = request.Description;
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.RoleUpdated,
             Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!),
@@ -103,7 +101,6 @@ public class RolesController : ControllerBase
         if (role == null) return NotFound();
 
         _db.Roles.Remove(role);
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.RoleDeleted,
             Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!),
@@ -147,7 +144,10 @@ public class RolesController : ControllerBase
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(AuditAction.AclUpdated,
+            Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!), User.FindFirstValue(ClaimTypes.Name),
+            "Secret", request.SecretId, HttpContext.Connection.RemoteIpAddress?.ToString(),
+            new Dictionary<string, object?> { ["role_id"] = id, ["permissions"] = request.Permissions }, ct);
         return NoContent();
     }
 }

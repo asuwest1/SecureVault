@@ -1,3 +1,4 @@
+import { sessionSignal } from '@/session'
 import { useAuthStore, decodeJwtPayload } from '@/stores/authStore'
 
 const API_BASE = '/api/v1'
@@ -25,25 +26,30 @@ export async function silentRefresh(): Promise<boolean> {
   if (isRefreshing && refreshPromise) return refreshPromise
 
   isRefreshing = true
+  const signal = sessionSignal()
   refreshPromise = (async () => {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
+        signal,
         credentials: 'include',  // Required for HttpOnly cookie
       })
 
+      if (signal.aborted) return false
       if (!res.ok) {
         useAuthStore.getState().clearAuth()
         return false
       }
 
       const data = await res.json()
+      if (signal.aborted) return false
       const payload = decodeJwtPayload(data.accessToken)
       if (payload) {
         useAuthStore.getState().setAuth(data.accessToken, payload)
       }
-      return true
+      return !!payload
     } catch {
+      if (signal.aborted) return false
       useAuthStore.getState().clearAuth()
       return false
     } finally {
@@ -63,7 +69,8 @@ export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const { accessToken } = useAuthStore.getState()
+  const { accessToken, userId } = useAuthStore.getState()
+  const signal = sessionSignal()
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -73,18 +80,23 @@ export async function apiRequest<T>(
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
+    signal,
     credentials: 'include',  // Always include for HttpOnly refresh cookie
     headers,
   })
 
+  if (signal.aborted) throw new DOMException('Session changed', 'AbortError')
+
   // Silent refresh on 401 — retry once
-  if (response.status === 401) {
+  if (response.status === 401 && !['/auth/login', '/auth/mfa/verify'].includes(path)) {
     const refreshed = await silentRefresh()
     if (!refreshed) throw new ApiError(401, 'Session expired. Please log in again.')
 
-    const { accessToken: newToken } = useAuthStore.getState()
+    const { accessToken: newToken, userId: refreshedUserId } = useAuthStore.getState()
+    if (userId && userId !== refreshedUserId) throw new DOMException('Account changed', 'AbortError')
     const retryResponse = await fetch(`${API_BASE}${path}`, {
       ...options,
+      signal: sessionSignal(),
       credentials: 'include',
       headers: {
         ...headers,
@@ -97,7 +109,7 @@ export async function apiRequest<T>(
       throw new ApiError(retryResponse.status, `Request failed: ${retryResponse.status}`, errorData)
     }
 
-    return retryResponse.json() as Promise<T>
+    return readResponse<T>(retryResponse)
   }
 
   if (!response.ok) {
@@ -108,7 +120,13 @@ export async function apiRequest<T>(
   // Handle 204 No Content
   if (response.status === 204) return undefined as T
 
-  return response.json() as Promise<T>
+  return readResponse<T>(response)
+}
+
+async function readResponse<T>(response: Response): Promise<T> {
+  if (response.status === 204) return undefined as T
+  const body = await response.text()
+  return body ? JSON.parse(body) as T : undefined as T
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -259,17 +277,22 @@ export const auditApi = {
    * <a href> cannot attach the token, so the server would reject it with 401.
    */
   downloadCsv: async (filename = 'audit-log.csv'): Promise<void> => {
-    const { accessToken } = useAuthStore.getState()
+    const { accessToken, userId } = useAuthStore.getState()
+    const signal = sessionSignal()
     const res = await fetch(`${API_BASE}/audit/export`, {
+      signal,
       credentials: 'include',
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     })
 
+    if (signal.aborted) throw new DOMException('Session changed', 'AbortError')
     if (res.status === 401) {
       const refreshed = await silentRefresh()
       if (!refreshed) throw new ApiError(401, 'Session expired. Please log in again.')
-      const { accessToken: newToken } = useAuthStore.getState()
+      const { accessToken: newToken, userId: refreshedUserId } = useAuthStore.getState()
+      if (userId !== refreshedUserId) throw new DOMException('Account changed', 'AbortError')
       const retry = await fetch(`${API_BASE}/audit/export`, {
+        signal: sessionSignal(),
         credentials: 'include',
         headers: newToken ? { Authorization: `Bearer ${newToken}` } : {},
       })

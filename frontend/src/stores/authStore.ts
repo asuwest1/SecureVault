@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { resetSession } from '@/session'
 
 // Access token stored in module-scope memory ONLY.
 // Never localStorage, never sessionStorage.
@@ -23,6 +24,7 @@ interface JwtPayload {
   is_super_admin: string
   role_ids: string | string[]
   exp: number
+  security_version?: string
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -34,6 +36,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   expiresAt: null,
 
   setAuth: (token: string, payload: JwtPayload) => {
+    const previous = decodeJwtPayload(get().accessToken ?? '')
+    if (get().userId !== payload.sub || previous?.security_version !== payload.security_version ||
+        previous?.is_super_admin !== payload.is_super_admin ||
+        JSON.stringify(previous?.role_ids) !== JSON.stringify(payload.role_ids)) resetSession()
     set({
       accessToken: token,
       userId: payload.sub,
@@ -49,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuth: () => {
+    resetSession()
     set({
       accessToken: null,
       userId: null,

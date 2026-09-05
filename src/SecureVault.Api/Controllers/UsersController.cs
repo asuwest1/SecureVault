@@ -88,7 +88,6 @@ public class UsersController : ControllerBase
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(
             AuditAction.UserCreated,
@@ -107,6 +106,9 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateUserRequest request, CancellationToken ct)
     {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        await _db.Database.ExecuteSqlRawAsync(
+            "DECLARE @r int; EXEC @r = sp_getapplock @Resource=N'SecureVault.UserSecurity', @LockMode=N'Exclusive', @LockOwner=N'Transaction', @LockTimeout=15000; IF @r < 0 THROW 51000, 'Security update busy.', 1;", ct);
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var callerUsername = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -114,15 +116,20 @@ public class UsersController : ControllerBase
         var user = await _db.Users.FindAsync([id], ct);
         if (user == null) return NotFound();
 
+        if (user.IsActive && user.IsSuperAdmin &&
+            (request.IsActive == false || request.IsSuperAdmin == false) &&
+            !await _db.Users.AnyAsync(u => u.Id != id && u.IsActive && u.IsSuperAdmin, ct))
+            return Conflict(new { error = "At least one active super administrator is required." });
+        await InvalidateSessionsAsync(user, ct);
         if (request.Email != null) user.Email = request.Email;
         if (request.IsActive.HasValue) user.IsActive = request.IsActive.Value;
         if (request.IsSuperAdmin.HasValue) user.IsSuperAdmin = request.IsSuperAdmin.Value;
         user.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.UserUpdated, callerId, callerUsername,
             "User", id, ip);
+        await transaction.CommitAsync(ct);
 
         return Ok(new UserResponse(user.Id, user.Username, user.Email, user.IsActive,
             user.IsSuperAdmin, user.IsLdapUser, user.MfaEnabled, user.CreatedAt, []));
@@ -132,20 +139,27 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        await _db.Database.ExecuteSqlRawAsync(
+            "DECLARE @r int; EXEC @r = sp_getapplock @Resource=N'SecureVault.UserSecurity', @LockMode=N'Exclusive', @LockOwner=N'Transaction', @LockTimeout=15000; IF @r < 0 THROW 51000, 'Security update busy.', 1;", ct);
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         if (callerId == id) return BadRequest(new { error = "Cannot delete your own account." });
 
         var user = await _db.Users.FindAsync([id], ct);
         if (user == null) return NotFound();
 
+        if (user.IsActive && user.IsSuperAdmin &&
+            !await _db.Users.AnyAsync(u => u.Id != id && u.IsActive && u.IsSuperAdmin, ct))
+            return Conflict(new { error = "At least one active super administrator is required." });
+        await InvalidateSessionsAsync(user, ct);
         // Deactivate instead of hard-delete to preserve audit log foreign keys
         user.IsActive = false;
         user.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.UserDeleted,
             callerId, User.FindFirstValue(ClaimTypes.Name), "User", id,
             HttpContext.Connection.RemoteIpAddress?.ToString());
+        await transaction.CommitAsync(ct);
 
         return NoContent();
     }
@@ -154,6 +168,9 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> AssignRole(Guid id, [FromBody] AssignRoleRequest request, CancellationToken ct)
     {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        await _db.Database.ExecuteSqlRawAsync(
+            "DECLARE @r int; EXEC @r = sp_getapplock @Resource=N'SecureVault.UserSecurity', @LockMode=N'Exclusive', @LockOwner=N'Transaction', @LockTimeout=15000; IF @r < 0 THROW 51000, 'Security update busy.', 1;", ct);
         // Validate both ends of the relationship up front rather than relying
         // on the DB FK violation, which would surface as a generic 500/409 with
         // no useful detail to the caller.
@@ -165,14 +182,18 @@ public class UsersController : ControllerBase
         var exists = await _db.UserRoles.AnyAsync(ur => ur.UserId == id && ur.RoleId == request.RoleId, ct);
         if (exists) return Conflict(new { error = "Role already assigned." });
 
+        await InvalidateSessionsAsync(await _db.Users.SingleAsync(u => u.Id == id, ct), ct);
         _db.UserRoles.Add(new UserRole
         {
             UserId = id,
             RoleId = request.RoleId,
             AssignedAt = DateTimeOffset.UtcNow
         });
-        await _db.SaveChangesAsync(ct);
-
+        await _audit.LogAsync(AuditAction.RoleMemberAdded,
+            Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!), User.FindFirstValue(ClaimTypes.Name),
+            "User", id, HttpContext.Connection.RemoteIpAddress?.ToString(),
+            new Dictionary<string, object?> { ["role_id"] = request.RoleId }, ct);
+        await transaction.CommitAsync(ct);
         return NoContent();
     }
 
@@ -180,11 +201,19 @@ public class UsersController : ControllerBase
     [Authorize(Policy = "SuperAdmin")]
     public async Task<IActionResult> RemoveRole(Guid id, Guid roleId, CancellationToken ct)
     {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        await _db.Database.ExecuteSqlRawAsync(
+            "DECLARE @r int; EXEC @r = sp_getapplock @Resource=N'SecureVault.UserSecurity', @LockMode=N'Exclusive', @LockOwner=N'Transaction', @LockTimeout=15000; IF @r < 0 THROW 51000, 'Security update busy.', 1;", ct);
         var ur = await _db.UserRoles.FirstOrDefaultAsync(ur => ur.UserId == id && ur.RoleId == roleId, ct);
         if (ur == null) return NotFound();
 
+        await InvalidateSessionsAsync(await _db.Users.SingleAsync(u => u.Id == id, ct), ct);
         _db.UserRoles.Remove(ur);
-        await _db.SaveChangesAsync(ct);
+        await _audit.LogAsync(AuditAction.RoleMemberRemoved,
+            Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!), User.FindFirstValue(ClaimTypes.Name),
+            "User", id, HttpContext.Connection.RemoteIpAddress?.ToString(),
+            new Dictionary<string, object?> { ["role_id"] = roleId }, ct);
+        await transaction.CommitAsync(ct);
         return NoContent();
     }
 
@@ -193,7 +222,10 @@ public class UsersController : ControllerBase
     {
         var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         // Users can create tokens for themselves; super admins can create for any user
+        if (User.FindFirstValue("purpose") != "access") return Forbid();
         if (!IsSuperAdmin() && callerId != id) return NotFound();
+        if (request.ExpiresAt.HasValue && request.ExpiresAt <= DateTimeOffset.UtcNow)
+            return BadRequest(new { error = "Token expiry must be in the future." });
 
         // Confirm the target user exists and is active before issuing a token.
         // Otherwise we'd happily mint a token that the api-token middleware
@@ -217,10 +249,40 @@ public class UsersController : ControllerBase
         };
 
         _db.ApiTokens.Add(apiToken);
-        await _db.SaveChangesAsync(ct);
 
-        return CreatedAtAction(null, null, new ApiTokenCreatedResponse(
+        await _audit.LogAsync(AuditAction.UserApiTokenCreated, callerId, User.FindFirstValue(ClaimTypes.Name),
+            "ApiToken", apiToken.Id, HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken: ct);
+        return Created($"/api/v1/users/{id}/api-tokens/{apiToken.Id}", new ApiTokenCreatedResponse(
             apiToken.Id, apiToken.Name, rawToken, apiToken.ExpiresAt));
+    }
+
+    [HttpGet("{id:guid}/api-tokens")]
+    public async Task<IActionResult> ListApiTokens(Guid id, CancellationToken ct)
+    {
+        if (!IsSuperAdmin() && User.FindFirstValue(ClaimTypes.NameIdentifier) != id.ToString()) return NotFound();
+        return Ok(await _db.ApiTokens.AsNoTracking().Where(t => t.UserId == id)
+            .Select(t => new { t.Id, t.Name, t.ExpiresAt, t.IsRevoked, t.LastUsedAt }).ToListAsync(ct));
+    }
+
+    [HttpDelete("{id:guid}/api-tokens/{tokenId:guid}")]
+    public async Task<IActionResult> RevokeApiToken(Guid id, Guid tokenId, CancellationToken ct)
+    {
+        var callerId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        if (!IsSuperAdmin() && callerId != id) return NotFound();
+        var token = await _db.ApiTokens.SingleOrDefaultAsync(t => t.Id == tokenId && t.UserId == id, ct);
+        if (token == null) return NotFound();
+        token.IsRevoked = true;
+        await _audit.LogAsync(AuditAction.UserApiTokenRevoked, callerId, User.FindFirstValue(ClaimTypes.Name),
+            "ApiToken", tokenId, HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken: ct);
+        return NoContent();
+    }
+
+    private async Task InvalidateSessionsAsync(User user, CancellationToken ct)
+    {
+        user.SecurityVersion = Guid.NewGuid();
+        await _db.RefreshTokens.Where(t => t.UserId == user.Id && !t.IsRevoked)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.IsRevoked, true), ct);
+        // API tokens check live account status and roles on every request.
     }
 
     private bool IsSuperAdmin() =>

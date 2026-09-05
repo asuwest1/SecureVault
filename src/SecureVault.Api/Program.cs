@@ -32,10 +32,6 @@ builder.Host.UseSerilog();
 // ─────────────────────────────────────────────────────────────────────────────
 // Database — Microsoft SQL Server via Microsoft.EntityFrameworkCore.SqlServer
 // ─────────────────────────────────────────────────────────────────────────────
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Default"))
-           .UseSnakeCaseNamingConvention());
-
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default"))
            .UseSnakeCaseNamingConvention());
@@ -99,6 +95,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
         options.Events = new JwtBearerEvents
         {
+            OnTokenValidated = async ctx =>
+            {
+                var principal = ctx.Principal!;
+                if (principal.FindFirst("purpose")?.Value != "access" ||
+                    !Guid.TryParse(principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId) ||
+                    !Guid.TryParse(principal.FindFirst("security_version")?.Value, out var version))
+                {
+                    ctx.Fail("Invalid access token.");
+                    return;
+                }
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var user = await db.Users.AsNoTracking().Include(u => u.UserRoles)
+                    .SingleOrDefaultAsync(u => u.Id == userId, ctx.HttpContext.RequestAborted);
+                var roles = principal.FindAll("role_ids").Select(c => c.Value).ToHashSet();
+                if (user == null || !user.IsActive || user.SecurityVersion != version ||
+                    principal.FindFirst("is_super_admin")?.Value != user.IsSuperAdmin.ToString().ToLowerInvariant() ||
+                    !roles.SetEquals(user.UserRoles.Select(r => r.RoleId.ToString())))
+                    ctx.Fail("Session revoked.");
+            },
             OnChallenge = ctx =>
             {
                 ctx.HandleResponse();
@@ -196,6 +211,12 @@ app.UseSerilogRequestLogging();
 
 app.UseIpRateLimiting();
 app.UseCors();
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.StartsWithSegments("/api"))
+        ctx.Response.Headers.CacheControl = "no-store";
+    await next();
+});
 
 app.UseStaticFiles();
 

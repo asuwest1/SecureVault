@@ -118,7 +118,6 @@ public class FoldersController : ControllerBase
         };
 
         _db.Folders.Add(folder);
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.FolderCreated, userId, username, "Folder", folder.Id, ip,
             new Dictionary<string, object?> { ["parent_folder_id"] = request.ParentFolderId });
@@ -143,7 +142,6 @@ public class FoldersController : ControllerBase
 
         if (request.Name != null) folder.Name = request.Name;
         folder.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.FolderUpdated, userId, User.FindFirstValue(ClaimTypes.Name),
             "Folder", id, HttpContext.Connection.RemoteIpAddress?.ToString());
@@ -183,6 +181,9 @@ public class FoldersController : ControllerBase
             }
         }
 
+        if (folderIds.Count > 1)
+            return Conflict(new { error = "Delete child folders before deleting this folder." });
+
         var containsSecrets = await _db.Secrets
             .IgnoreQueryFilters()
             .AnyAsync(s => folderIds.Contains(s.FolderId), ct);
@@ -190,7 +191,6 @@ public class FoldersController : ControllerBase
             return Conflict(new { error = "Folder or one of its descendants contains secrets." });
 
         _db.Folders.Remove(folder);
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.FolderDeleted, userId, User.FindFirstValue(ClaimTypes.Name),
             "Folder", id, HttpContext.Connection.RemoteIpAddress?.ToString());
@@ -228,7 +228,6 @@ public class FoldersController : ControllerBase
             });
         }
 
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(AuditAction.AclUpdated,
             Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!),

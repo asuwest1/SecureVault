@@ -175,7 +175,7 @@ state and prompts for the Super Admin credentials. Submit; the API:
 3. Creates the root folder.
 4. Writes an `audit_log` row with `action = SystemInitialized`.
 
-After completion, `GET /api/v1/setup/status` returns `410 Gone` and the wizard
+After completion, `GET /api/v1/setup/status` returns `{ "initialized": true }`, while `POST /api/v1/setup/initialize` returns `410 Gone` and the wizard
 is permanently disabled.
 
 ---
@@ -242,3 +242,39 @@ sqlcmd -S localhost -d securevault -E -Q "SELECT TOP 5 name FROM sys.tables"
 # 5. End-to-end probe
 Invoke-WebRequest "https://vault.example.com/api/v1/setup/status" -UseBasicParsing
 ```
+
+
+## Security update migration (September 2026)
+
+1. Back up the database and encryption/signing keys; stop every SecureVault service instance.
+2. Check `dbo.__EFMigrationsHistory`. For an existing vault it must contain
+   `20240101000000_InitialSchema`. This release adds the EF discovery attributes
+   missing from the original migration. If tables were created manually and this
+   history entry is absent, compare the deployed schema with the initial migration
+   and establish an EF baseline before running the update. Do not run the initial
+   CREATE TABLE migration over an existing schema, or remove existing tables.
+3. From this source checkout, install the .NET 8 EF tool if necessary:
+   `dotnet tool install --global dotnet-ef --version 8.0.10`.
+   Apply the checked-in migrations using the `dotnet ef database update` command
+   in section 5, with an administrator connection. Do not generate a new migration
+   as part of deployment. The new migration is `20260905000000_SecurityState`.
+4. Confirm `system_state` contains row 1 with `is_initialized = 1` for an existing
+   vault; confirm both `users` and `refresh_tokens` have `security_version` columns.
+   Existing refresh tokens are revoked by the migration. Fresh databases start
+   with `is_initialized = 0` and complete the setup wizard once.
+5. Deploy the application and restart it. All existing browser sessions must sign
+   in again. Verify administrator login, a restricted user's access, secret
+   reveal/auditing, and the Account security page before reopening general access.
+
+The application does not migrate the database at runtime. Its database account
+continues to require only the existing runtime grants. Schema changes require
+an operator connection. API tokens continue to use current account status and
+roles on every request; review/revoke any existing token whose origin is uncertain.
+
+Audit writes now fail closed. A failed audit insert rolls back the corresponding
+secret/user/ACL mutation and prevents secret disclosure. Monitor database errors
+when deploying; do not bypass the audit requirement to resolve an outage.
+
+Rollback requires restoring a matching application/database backup while all
+instances are stopped. Do not downgrade to code that accepts MFA challenges as
+access tokens. Prefer fixing forward after the new migration.

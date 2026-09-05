@@ -10,6 +10,10 @@ export default [
   },
   js.configs.recommended,
   {
+    files: ['tests/**/*.cjs'],
+    languageOptions: { globals: { require: 'readonly', process: 'readonly', module: 'readonly', global: 'writable', Buffer: 'readonly', Response: 'readonly' } },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,

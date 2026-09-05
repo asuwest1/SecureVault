@@ -243,7 +243,9 @@ public class PermissionService : IPermissionService
                     AND sa.role_id IN ({roleInClause})
                     AND (sa.permissions & 1) = 1
                 )
-                OR s.folder_id IN (SELECT id FROM descendants)
+                OR (s.folder_id IN (SELECT id FROM descendants)
+                    AND NOT EXISTS (SELECT 1 FROM secret_acl override_acl
+                        WHERE override_acl.secret_id = s.id AND override_acl.role_id IN ({roleInClause})))
             )
         ";
 

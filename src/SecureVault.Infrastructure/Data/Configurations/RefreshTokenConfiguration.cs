@@ -9,6 +9,7 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
     public void Configure(EntityTypeBuilder<RefreshToken> builder)
     {
         builder.ToTable("refresh_tokens");
+        builder.Property(t => t.SecurityVersion).HasColumnName("security_version");
         builder.HasKey(rt => rt.Id);
 
         builder.Property(rt => rt.Id).HasColumnName("id").HasDefaultValueSql("NEWID()");

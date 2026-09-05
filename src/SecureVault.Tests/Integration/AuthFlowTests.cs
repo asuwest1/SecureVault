@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -112,6 +114,22 @@ public class AuthFlowTests : IAsyncLifetime
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
+    }
+
+    [Fact]
+    public async Task UpgradeExistingVault_SetsPermanentInitializationMarker()
+    {
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20240101000000_InitialSchema");
+        // Simulate an existing vault whose administrator was already demoted.
+        await db.Database.ExecuteSqlRawAsync("INSERT INTO users (username, email, is_super_admin) VALUES ('existing', 'existing@test.com', 0);");
+        await migrator.MigrateAsync();
+        (await db.SystemStates.SingleAsync()).IsInitialized.Should().BeTrue();
+        (await Client.PostAsJsonAsync("/api/v1/setup/initialize", new {
+            AdminUsername = "intruder", AdminEmail = "intruder@test.com", AdminPassword = "Intruder123!"
+        })).StatusCode.Should().Be(HttpStatusCode.Gone);
     }
 
     [Fact]

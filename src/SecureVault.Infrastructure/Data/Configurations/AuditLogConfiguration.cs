@@ -11,7 +11,7 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
 {
     public void Configure(EntityTypeBuilder<AuditLog> builder)
     {
-        builder.ToTable("audit_log");
+        builder.ToTable("audit_log", t => t.UseSqlOutputClause(false));
         builder.HasKey(a => a.Id);
 
         // BIGINT IDENTITY column

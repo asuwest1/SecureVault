@@ -72,6 +72,7 @@ export function VaultPage() {
         )}
 
         <div className="p-2 border-t border-border">
+          <Link to="/account/security" className="block p-2 text-sm">Account security</Link>
           <button
             onClick={() => logout()}
             className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm

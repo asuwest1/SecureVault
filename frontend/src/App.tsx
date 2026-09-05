@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useIdleTimeout } from '@/hooks/useIdleTimeout'
@@ -8,6 +8,9 @@ import { SecretDetailPage } from '@/pages/SecretDetailPage'
 import { AuditLogPage } from '@/pages/AuditLogPage'
 import { AdminUsersPage } from '@/pages/AdminUsersPage'
 import { FirstRunPage } from '@/pages/FirstRunPage'
+import { SecretFormPage } from '@/pages/SecretFormPage'
+import { AccountSecurityPage } from '@/pages/AccountSecurityPage'
+import { NewUserPage } from '@/pages/NewUserPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -25,12 +28,10 @@ function RequireSuperAdmin({ children }: { children: ReactNode }) {
 export default function App() {
   const { isAuthenticated, silentRefresh, logout } = useAuth()
 
-  // Attempt silent refresh on mount (restore session after page refresh)
+  const [restoring, setRestoring] = useState(true)
   useEffect(() => {
-    if (!isAuthenticated) {
-      silentRefresh()
-    }
-  }, [isAuthenticated, silentRefresh])
+    void silentRefresh().finally(() => setRestoring(false))
+  }, [silentRefresh])
 
   // Idle timeout: 15 minutes → auto logout
   useIdleTimeout(
@@ -41,6 +42,8 @@ export default function App() {
     },
     15 * 60 * 1000
   )
+
+  if (restoring) return <p className="p-6">Restoring session...</p>
 
   return (
     <Routes>
@@ -53,6 +56,10 @@ export default function App() {
         </RequireAuth>
       } />
 
+      <Route path="/secrets/new" element={<RequireAuth><SecretFormPage key="new" /></RequireAuth>} />
+      <Route path="/secrets/:id/edit" element={<RequireAuth><SecretFormPage /></RequireAuth>} />
+      <Route path="/account/security" element={<RequireAuth><AccountSecurityPage /></RequireAuth>} />
+      <Route path="/admin/users/new" element={<RequireAuth><RequireSuperAdmin><NewUserPage /></RequireSuperAdmin></RequireAuth>} />
       <Route path="/secrets/:id" element={
         <RequireAuth>
           <SecretDetailPage />
