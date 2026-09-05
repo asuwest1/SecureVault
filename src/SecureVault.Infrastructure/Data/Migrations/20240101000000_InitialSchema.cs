@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace SecureVault.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
+    [Microsoft.EntityFrameworkCore.Infrastructure.DbContext(typeof(AppDbContext))]
+    [Migration("20240101000000_InitialSchema")]
     public partial class InitialSchema : Migration
     {
         /// <inheritdoc />

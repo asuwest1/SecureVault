@@ -118,7 +118,7 @@ public class AuthController : ControllerBase
         // MFA required
         if (user.MfaEnabled)
         {
-            var mfaToken = _tokens.GenerateMfaChallengeToken(user.Id, user.Username);
+            var mfaToken = _tokens.GenerateMfaChallengeToken(user.Id, user.Username, user.SecurityVersion);
             await _audit.LogAsync(AuditAction.AuthLogin, user.Id, user.Username, ipAddress: ip,
                 detail: new Dictionary<string, object?> { ["mfa_required"] = true });
             return Ok(new LoginResponse(string.Empty, DateTimeOffset.UtcNow, MfaRequired: true, MfaToken: mfaToken));
@@ -148,7 +148,8 @@ public class AuthController : ControllerBase
             .Include(u => u.UserRoles)
             .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
-        if (user == null || !user.IsActive || !user.MfaEnabled || user.MfaSecretEnc == null)
+        if (user == null || !user.IsActive || !user.MfaEnabled || user.MfaSecretEnc == null ||
+            principal.FindFirstValue("security_version") != user.SecurityVersion.ToString())
             return Unauthorized(new { error = "Invalid MFA challenge token." });
 
         if (user.LockedUntil.HasValue && user.LockedUntil > DateTimeOffset.UtcNow)
@@ -201,6 +202,9 @@ public class AuthController : ControllerBase
         var username = User.FindFirstValue(ClaimTypes.Name);
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
+        var user = await _db.Users.SingleAsync(u => u.Id == userId, ct);
+        user.SecurityVersion = Guid.NewGuid();
+        await _db.SaveChangesAsync(ct);
         await _tokens.RevokeAllRefreshTokensAsync(userId, ct);
 
         Response.Cookies.Delete("refresh_token", new CookieOptions
@@ -213,6 +217,48 @@ public class AuthController : ControllerBase
 
         await _audit.LogAsync(AuditAction.AuthLogout, userId, username, ipAddress: ip);
         return Ok();
+    }
+
+    [HttpPost("mfa/setup")]
+    [Authorize]
+    public async Task<IActionResult> SetupMfa(CancellationToken ct)
+    {
+        if (User.FindFirstValue("purpose") != "access") return Forbid();
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await _db.Users.SingleAsync(u => u.Id == userId, ct);
+        if (user.MfaEnabled) return Conflict(new { error = "MFA is already enabled." });
+        var (encryptedSecret, uri) = _mfa.GenerateSetup(user.Username);
+        user.MfaSecretEnc = encryptedSecret;
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { otpAuthUri = uri });
+    }
+
+    [HttpPost("mfa/enable")]
+    [Authorize]
+    public async Task<IActionResult> EnableMfa([FromBody] MfaCodeRequest request, CancellationToken ct)
+    {
+        if (User.FindFirstValue("purpose") != "access") return Forbid();
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await _db.Users.Include(u => u.UserRoles).SingleAsync(u => u.Id == userId, ct);
+        if (user.MfaEnabled || user.MfaSecretEnc == null) return Conflict();
+        if (user.LockedUntil > DateTimeOffset.UtcNow) return Unauthorized();
+        if (!_mfa.Verify(user.MfaSecretEnc, request.Code))
+        {
+            await HandleFailedAttemptAsync(user, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
+            return BadRequest(new { error = "Invalid MFA code." });
+        }
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+        user.MfaEnabled = true;
+        user.SecurityVersion = Guid.NewGuid();
+        user.FailedAttempts = 0;
+        user.LockedUntil = null;
+        await _db.RefreshTokens.Where(t => t.UserId == userId && !t.IsRevoked)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.IsRevoked, true), ct);
+        await _audit.LogAsync(AuditAction.AuthMfaEnabled, userId, user.Username,
+            ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken: ct);
+        await transaction.CommitAsync(ct);
+        return await IssueTokensAsync(user, user.UserRoles.Select(r => r.RoleId).ToList(),
+            HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
     }
 
     private async Task HandleFailedAttemptAsync(
@@ -237,7 +283,7 @@ public class AuthController : ControllerBase
         Core.Entities.User user, List<Guid> roleIds, string? ip, CancellationToken ct)
     {
         var (accessToken, accessExpiresAt) = _tokens.GenerateAccessToken(user, roleIds);
-        var (refreshToken, refreshExpiresAt) = await _tokens.GenerateRefreshTokenAsync(user.Id, ct);
+        var (refreshToken, refreshExpiresAt) = await _tokens.GenerateRefreshTokenAsync(user.Id, ct, user.SecurityVersion);
 
         // HttpOnly cookie scoped to refresh endpoint only
         Response.Cookies.Append("refresh_token", refreshToken, new CookieOptions
@@ -254,3 +300,5 @@ public class AuthController : ControllerBase
         return Ok(new LoginResponse(accessToken, accessExpiresAt));
     }
 }
+
+public record MfaCodeRequest([System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.RegularExpression(@"^\d{6}$")] string Code);

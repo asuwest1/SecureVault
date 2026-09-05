@@ -39,6 +39,8 @@ public class TokenService
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Name, user.Username),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("purpose", "access"),
+            new("security_version", user.SecurityVersion.ToString()),
             new("is_super_admin", user.IsSuperAdmin.ToString().ToLower()),
         };
 
@@ -58,14 +60,15 @@ public class TokenService
         return (new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
 
-    public string GenerateMfaChallengeToken(Guid userId, string username)
+    public string GenerateMfaChallengeToken(Guid userId, string username, Guid? securityVersion = null)
     {
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new Claim(JwtRegisteredClaimNames.Name, username),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("purpose", "mfa_challenge")
+            new Claim("purpose", "mfa_challenge"),
+            new Claim("security_version", (securityVersion ?? Guid.Empty).ToString())
         };
 
         var token = new JwtSecurityToken(
@@ -82,7 +85,7 @@ public class TokenService
     public ClaimsPrincipal? ValidateMfaChallengeToken(string token)
     {
         var parameters = GetValidationParameters();
-        var handler = new JwtSecurityTokenHandler();
+        var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
 
         try
         {
@@ -103,7 +106,7 @@ public class TokenService
     }
 
     public async Task<(string token, DateTimeOffset expiresAt)> GenerateRefreshTokenAsync(
-        Guid userId, CancellationToken cancellationToken = default)
+        Guid userId, CancellationToken cancellationToken = default, Guid securityVersion = default)
     {
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         var tokenHash = ComputeHash(rawToken);
@@ -114,6 +117,7 @@ public class TokenService
         {
             Id = Guid.NewGuid(),
             UserId = userId,
+            SecurityVersion = securityVersion,
             TokenHash = tokenHash,
             ExpiresAt = expiresAt,
             CreatedAt = DateTimeOffset.UtcNow
@@ -149,7 +153,8 @@ public class TokenService
             .AsNoTracking()
             .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
 
-        if (refreshToken?.User is not { IsActive: true })
+        if (refreshToken?.User is not { IsActive: true } ||
+            refreshToken.SecurityVersion != refreshToken.User.SecurityVersion)
             return null;
 
         return refreshToken.User;

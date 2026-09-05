@@ -2,6 +2,7 @@ namespace SecureVault.Core.Entities;
 
 public class RefreshToken
 {
+    public Guid SecurityVersion { get; set; }
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string TokenHash { get; set; } = string.Empty;

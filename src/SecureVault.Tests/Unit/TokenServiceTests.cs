@@ -52,6 +52,8 @@ public class TokenServiceTests : IDisposable
         token.Issuer.Should().Be("SecureVault.Tests");
         token.Audiences.Should().ContainSingle().Which.Should().Be("SecureVault.TestClient");
         token.Subject.Should().Be(user.Id.ToString());
+        token.Claims.Single(c => c.Type == "purpose").Value.Should().Be("access");
+        token.Claims.Single(c => c.Type == "security_version").Value.Should().Be(user.SecurityVersion.ToString());
         token.Claims.Single(c => c.Type == JwtRegisteredClaimNames.Name).Value.Should().Be("alice");
         token.Claims.Single(c => c.Type == "is_super_admin").Value.Should().Be("true");
         token.Claims.Where(c => c.Type == "role_ids").Select(c => c.Value)
@@ -68,8 +70,7 @@ public class TokenServiceTests : IDisposable
         var principal = _sut.ValidateMfaChallengeToken(token);
 
         principal.Should().NotBeNull();
-        var subject = principal!.FindFirst(JwtRegisteredClaimNames.Sub)
-            ?? principal.FindFirst(ClaimTypes.NameIdentifier);
+        var subject = principal!.FindFirst(JwtRegisteredClaimNames.Sub);
         subject!.Value.Should().Be(userId.ToString());
         principal.FindFirst("purpose")!.Value.Should().Be("mfa_challenge");
     }

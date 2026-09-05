@@ -112,6 +112,125 @@ public class SecurityTests : IAsyncLifetime
         await db.Database.MigrateAsync();
     }
 
+    [Fact]
+    public async Task MfaChallenge_CannotMintApiToken_AndValidCodeCompletesLogin()
+    {
+        var token = await SetupAndLoginAsync();
+        Client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        var setup = await Client.PostAsync("/api/v1/auth/mfa/setup", null);
+        setup.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync();
+        var encryption = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
+        await db.Entry(user).ReloadAsync();
+        var key = encryption.DecryptWithMek(user.MfaSecretEnc!);
+        try
+        {
+            var code = new OtpNet.Totp(key).ComputeTotp();
+            var enable = await Client.PostAsJsonAsync("/api/v1/auth/mfa/enable", new { Code = code });
+            enable.StatusCode.Should().Be(HttpStatusCode.OK);
+            // Enrollment revokes pre-MFA access tokens.
+            (await Client.GetAsync("/api/v1/users")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            await db.Entry(user).ReloadAsync();
+            var service = scope.ServiceProvider.GetRequiredService<TokenService>();
+            var challenge = service.GenerateMfaChallengeToken(user.Id, user.Username, user.SecurityVersion);
+            Client.DefaultRequestHeaders.Authorization = new("Bearer", challenge);
+            (await Client.PostAsJsonAsync($"/api/v1/users/{user.Id}/api-tokens", new { Name = "bypass" }))
+                .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await db.ApiTokens.CountAsync()).Should().Be(0);
+            var verify = await Client.PostAsJsonAsync("/api/v1/auth/mfa/verify", new { MfaToken = challenge, Code = code });
+            verify.StatusCode.Should().Be(HttpStatusCode.OK);
+            var login = await verify.Content.ReadFromJsonAsync<LoginResult>();
+            Client.DefaultRequestHeaders.Authorization = new("Bearer", login!.AccessToken);
+            (await Client.GetAsync("/api/v1/users")).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+        finally { CryptographicOperations.ZeroMemory(key); }
+    }
+
+    [Fact]
+    public async Task LastAdministrator_CannotBeDemoted_AndSetupStaysClosedAfterOutOfBandDemotion()
+    {
+        var token = await SetupAndLoginAsync();
+        Client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync();
+        (await Client.PutAsJsonAsync($"/api/v1/users/{user.Id}", new { IsSuperAdmin = false }))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Client.PutAsJsonAsync($"/api/v1/users/{user.Id}", new { IsActive = false }))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
+        user.IsSuperAdmin = false;
+        await db.SaveChangesAsync();
+        Client.DefaultRequestHeaders.Authorization = null;
+        (await Client.PostAsJsonAsync("/api/v1/setup/initialize", new {
+            AdminUsername = "intruder", AdminEmail = "intruder@test.com", AdminPassword = "TestPassword123!"
+        })).StatusCode.Should().Be(HttpStatusCode.Gone);
+    }
+
+    [Fact]
+    public async Task Deactivation_ImmediatelyRejectsExistingAccessToken()
+    {
+        var token = await SetupAndLoginAsync();
+        Client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        var create = await Client.PostAsJsonAsync("/api/v1/users", new {
+            Username = "disabled", Email = "disabled@test.com", Password = "TestPassword123!"
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await create.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        var id = created.GetProperty("id").GetGuid();
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync(u => u.Id == id);
+        var service = scope.ServiceProvider.GetRequiredService<TokenService>();
+        var (userToken, _) = service.GenerateAccessToken(user, []);
+        (await Client.PutAsJsonAsync($"/api/v1/users/{id}", new { IsActive = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+        Client.DefaultRequestHeaders.Authorization = new("Bearer", userToken);
+        (await Client.GetAsync($"/api/v1/users/{id}")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ExplicitSecretDeny_HidesMetadataFromList()
+    {
+        await SetupAndLoginAsync();
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await db.Users.SingleAsync();
+        var folder = await db.Folders.SingleAsync();
+        var role = new Core.Entities.Role { Id = Guid.NewGuid(), Name = "Reader", CreatedAt = DateTimeOffset.UtcNow };
+        db.Roles.Add(role);
+        db.UserRoles.Add(new Core.Entities.UserRole { UserId = user.Id, RoleId = role.Id, AssignedAt = DateTimeOffset.UtcNow });
+        user.IsSuperAdmin = false;
+        db.FolderAcls.Add(new Core.Entities.FolderAcl { FolderId = folder.Id, RoleId = role.Id, Permissions = Core.Enums.SecretPermission.View });
+        var secret = new Core.Entities.Secret { Id = Guid.NewGuid(), Name = "Restricted", FolderId = folder.Id,
+            CreatedByUserId = user.Id, ValueEnc = [1], DekEnc = [1], Nonce = new byte[12] };
+        db.Secrets.Add(secret);
+        db.SecretAcls.Add(new Core.Entities.SecretAcl { SecretId = secret.Id, RoleId = role.Id, Permissions = Core.Enums.SecretPermission.None });
+        await db.SaveChangesAsync();
+        var tokens = scope.ServiceProvider.GetRequiredService<TokenService>();
+        var (token, _) = tokens.GenerateAccessToken(user, [role.Id]);
+        Client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        var response = await Client.GetAsync("/api/v1/secrets");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        body.GetProperty("totalCount").GetInt32().Should().Be(0);
+        (await Client.GetAsync($"/api/v1/secrets/{secret.Id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task AuditInsertFailure_RollsBackSecretCreation()
+    {
+        var token = await SetupAndLoginAsync();
+        Client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var folder = await db.Folders.SingleAsync();
+        await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER test_audit_failure ON audit_log INSTEAD OF INSERT AS THROW 51000, 'Audit unavailable', 1;");
+        var result = await Client.PostAsJsonAsync("/api/v1/secrets", new { Name = "Must roll back", Value = "secret", Type = 1, FolderId = folder.Id });
+        result.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        (await db.Secrets.CountAsync()).Should().Be(0);
+    }
+
     /// <summary>
     /// AC-4: After creating a secret, verify that the raw database storage
     /// does NOT contain the plaintext value.

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { resetSession } from '@/session'
 
 // Access token stored in module-scope memory ONLY.
 // Never localStorage, never sessionStorage.
@@ -34,6 +35,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   expiresAt: null,
 
   setAuth: (token: string, payload: JwtPayload) => {
+    if (get().userId !== payload.sub) resetSession()
     set({
       accessToken: token,
       userId: payload.sub,
@@ -49,6 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuth: () => {
+    resetSession()
     set({
       accessToken: null,
       userId: null,

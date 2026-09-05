@@ -37,7 +37,7 @@ public class FirstRunService
     public async Task<bool> IsInitializedAsync(CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        return await db.Users.AnyAsync(u => u.IsSuperAdmin, ct);
+        return await db.SystemStates.AnyAsync(s => s.IsInitialized, ct);
     }
 
     public async Task InitializeAsync(
@@ -62,7 +62,7 @@ public class FirstRunService
                 ct);
 
             // Double-check inside lock
-            if (await db.Users.AnyAsync(u => u.IsSuperAdmin, ct))
+            if (await db.SystemStates.AnyAsync(s => s.IsInitialized, ct))
                 throw new InvalidOperationException("System is already initialized.");
 
             ValidatePasswordStrength(adminPassword);
@@ -98,18 +98,12 @@ public class FirstRunService
             };
             db.Folders.Add(rootFolder);
 
+            var state = await db.SystemStates.SingleAsync(s => s.Id == 1, ct);
+            state.IsInitialized = true;
+            db.AuditLogs.Add(new AuditLog { Action = AuditAction.SystemInitialized,
+                ActorUserId = admin.Id, ActorUsername = admin.Username, EventTime = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
-
-            // Audit system initialization
-            await _audit.LogAsync(
-                AuditAction.SystemInitialized,
-                admin.Id,
-                admin.Username,
-                detail: new Dictionary<string, object?>
-                {
-                    ["admin_username"] = adminUsername
-                });
 
             _logger.LogInformation("SecureVault initialization complete. Admin user: {Username}", adminUsername);
         }

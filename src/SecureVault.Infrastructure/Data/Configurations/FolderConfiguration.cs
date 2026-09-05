@@ -21,7 +21,7 @@ public class FolderConfiguration : IEntityTypeConfiguration<Folder>
         builder.HasOne(f => f.ParentFolder)
             .WithMany(f => f.Children)
             .HasForeignKey(f => f.ParentFolderId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.NoAction);
 
         builder.HasIndex(f => f.ParentFolderId);
     }

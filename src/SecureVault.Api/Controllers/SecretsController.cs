@@ -209,7 +209,6 @@ public class SecretsController : ControllerBase
             };
 
             _db.Secrets.Add(secret);
-            await _db.SaveChangesAsync(ct);
 
             await _audit.LogAsync(
                 AuditAction.SecretCreated,
@@ -318,7 +317,6 @@ public class SecretsController : ControllerBase
         secret.UpdatedByUserId = userId;
         secret.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(
             AuditAction.SecretUpdated,
@@ -347,7 +345,6 @@ public class SecretsController : ControllerBase
         // Soft delete with 30-day retention before purge
         secret.DeletedAt = DateTimeOffset.UtcNow;
         secret.PurgeAfter = DateTimeOffset.UtcNow.AddDays(30);
-        await _db.SaveChangesAsync(ct);
 
         await _audit.LogAsync(
             AuditAction.SecretDeleted,

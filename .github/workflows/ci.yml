@@ -37,6 +37,12 @@ jobs:
         working-directory: frontend
         run: npm run type-check
 
+      - name: Regression tests and lint
+        working-directory: frontend
+        run: |
+          npm test
+          npm run lint
+
       - name: Build
         working-directory: frontend
         run: npm run build
@@ -165,7 +171,7 @@ jobs:
   publish-artifact:
     name: Publish Release Artifact
     runs-on: ubuntu-latest
-    needs: [frontend, dotnet-build, trivy-scan]
+    needs: [frontend, dotnet-build, trivy-scan, integration-tests]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
@@ -193,6 +199,7 @@ jobs:
           dotnet publish src/SecureVault.Api/SecureVault.Api.csproj \
             -c Release -r win-x64 --no-self-contained \
             -o ./publish
+          mkdir -p ./publish/wwwroot
           cp -r frontend/dist/* ./publish/wwwroot/
 
       - name: Zip release bundle

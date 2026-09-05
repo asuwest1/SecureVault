@@ -9,6 +9,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     public void Configure(EntityTypeBuilder<User> builder)
     {
         builder.ToTable("users");
+        builder.Property(u => u.SecurityVersion).HasColumnName("security_version").IsConcurrencyToken();
         builder.HasKey(u => u.Id);
 
         builder.Property(u => u.Id).HasColumnName("id").HasDefaultValueSql("NEWID()");
